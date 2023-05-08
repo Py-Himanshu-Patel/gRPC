@@ -34,6 +34,11 @@ Add below to `~/.profile` and source the `.profile` file.
 export PATH=$PATH:/usr/local/go/bin
 export PATH=$PATH:$(go env GOPATH)/bin
 ```
+Don't forget to add below lines as well
+```bash
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
+```
 
 Install the protocol compiler plugins for Go using the following commands:
 ```bash
