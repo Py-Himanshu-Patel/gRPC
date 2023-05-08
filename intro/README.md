@@ -26,7 +26,7 @@ $ protoc
 ```
 
 ## Download and Install Go and Go-gRPC libraries
-Download Go: https://go.dev/dl/
+Download Go: https://go.dev/dl/  
 Install Go: https://go.dev/doc/install
 
 Add below to `~/.profile` and source the `.profile` file.
