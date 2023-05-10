@@ -22,7 +22,7 @@ type server struct {
 	pb.UnimplementedOrderManagementServer
 }
 
-func (s *server) getOrder(ctx context.Context, orderId *wrappers.StringValue) (*pb.Order, error) {
+func (s *server) GetOrder(ctx context.Context, orderId *wrappers.StringValue) (*pb.Order, error) {
 	ord, found := orderMap[orderId.Value]
 	if !found {
 		return nil, status.Errorf(codes.NotFound, "Product does not exists : %s", orderId.Value)
@@ -31,6 +31,14 @@ func (s *server) getOrder(ctx context.Context, orderId *wrappers.StringValue) (*
 }
 
 func main() {
+	// put some data in map
+	orderMap["106"] = pb.Order{
+		Items:       []string{"Banana", "Mango"},
+		Description: "Fruit Basket",
+		Price:       202,
+		Destination: "Fruit Market",
+	}
+
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
