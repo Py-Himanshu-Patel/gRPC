@@ -27,6 +27,31 @@ Generate Client
 protoc --go_out=. --go_opt=MOrderMgmt.proto=client/ecommerce --go-grpc_out=. --go-grpc_opt=MOrderMgmt.proto=client/ecommerce OrderMgmt.proto
 ```
 
+### Proto File
+```protobuf
+syntax = "proto3";
+
+// Use this package to leverage the well-known types such as StringValue
+import "google/protobuf/wrappers.proto";
+
+package ecommerce;
+
+service OrderManagement {
+  rpc getOrder(google.protobuf.StringValue) returns (Order);
+}
+
+// Define the Order type
+message Order  {
+  string id = 1;
+  // repeated is used to represent the fields that can be repeated 
+  // any number of times including zero in a message
+  repeated string items = 2;
+  string description = 3;
+  float price = 4;
+  string destination = 5;
+}
+```
+
 ### Server Code
 ```go
 package main
@@ -144,3 +169,87 @@ This sequence of multiple responses is known as a “stream.” After sending al
 
 For a search capability. Rather than sending all the matching orders at once, the `OrderManagement` service can send
 the orders as and when they are found. This means the order service client will receive multiple response messages for a single request that it has sent.
+
+### Proto File
+```protobuf
+...
+
+service OrderManagement {
+  rpc getOrder(google.protobuf.StringValue) returns (Order);
+  rpc searchOrders(google.protobuf.StringValue) returns (stream Order);
+}
+
+...
+```
+
+Don't forget to generate the client and server code using the same commands. We retrieve messages from the client-side stream using the Recv()
+method and keep doing so until we reach the end of the stream.
+
+### Server Code
+```go
+// server streaming
+func (s *server) SearchOrders(searchQuery *wrappers.StringValue, stream pb.OrderManagement_SearchOrdersServer) error {
+	for _, order := range orderMap {
+		for _, itemStr := range order.Items {
+			if strings.Contains(itemStr, searchQuery.Value) {
+				err := stream.Send(&order)
+				if err != nil {
+					return fmt.Errorf("error sending message to stream : %v", err)
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
+```
+The `SearchOrders` method has two parameters: `searchQuery`, a string value, and a special parameter `OrderManagement_SearchOrdersServer` to write our response. When a new order is found, it is written to the stream using the Send(…) method of the stream reference object.
+
+Once all the responses are written to the stream you can mark the end of the stream by returning nil, and the server status and other trailing metadata will be sent
+to the client.
+
+### Client Code
+```go
+	// server streaming client
+	searchStream, _ := ordMgmtClient.SearchOrders(ctx, &wrappers.StringValue{Value: "Mouse"})
+	for {
+		searchOrder, err := searchStream.Recv()
+		if err == io.EOF {
+			break
+		}
+		// handle other possible errors
+		log.Print("Search Result : ", searchOrder)
+	}
+```
+we retrieve messages from the client-side stream using the `Recv()` method and keep doing so until we reach the end of the stream.
+
+## Client-Streaming RPC
+The client sends multiple messages to the server instead of a single request. The server sends back a single response to the client. However, the server does not necessarily have to wait until it receives all the messages from the client side to send a response. Based on this logic you may send the response after reading one or a few messages from the stream or after reading all the messages.
+
+`updateOrders`, in the `OrderManagement` service to update a set of orders. Here we want to send the order list as a stream of messages to the server and server will process that stream and send a message with the status of the orders that are updated.
+
+<div align="center">
+    <img src="images/grpc-client-streaming.png">
+</div>
+
+---
+
+### Proto File
+```protobuf
+...
+
+service OrderManagement {
+  rpc getOrder(google.protobuf.StringValue) returns (Order);
+  rpc searchOrders(google.protobuf.StringValue) returns (stream Order);
+  rpc updateOrders(stream Order) returns (google.protobuf.StringValue);
+}
+
+...
+```
+
+### Server Code
+In server side you may read a few messages or all the messages until the end of the stream. The service can send its response simply by calling the `SendAndClose` method of the `OrderManagement_UpdateOrdersServer` object, which also marks the end of the stream for server-side messages. If the server decides to prematurely stop reading from the client’s stream, the server should cancel the client stream so the client knows to stop producing messages.
+
+```go
+
+```

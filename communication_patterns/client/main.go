@@ -6,6 +6,7 @@ import (
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"io"
 	"log"
 	"time"
 )
@@ -39,4 +40,17 @@ func main() {
 		log.Fatalf("Could not add product: %v", err)
 	}
 	log.Print("GetOrder Response -> : ", retrievedOrder)
+
+	log.Print("\n-----------------------------------------------------------------------------\n")
+
+	// server streaming client
+	searchStream, _ := ordMgmtClient.SearchOrders(ctx, &wrappers.StringValue{Value: "Mouse"})
+	for {
+		searchOrder, err := searchStream.Recv()
+		if err == io.EOF {
+			break
+		}
+		// handle other possible errors
+		log.Print("Search Result : ", searchOrder)
+	}
 }
