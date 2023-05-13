@@ -4,6 +4,7 @@ import (
 	pb "OrderManagement/ecommerce"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -47,6 +48,25 @@ func (s *server) SearchOrders(searchQuery *wrappers.StringValue, stream pb.Order
 		}
 	}
 	return nil
+}
+
+func (s *server) UpdateOrders(stream pb.OrderManagement_UpdateOrdersServer) error {
+	ordersStr := "Updated Order IDs : "
+	for {
+		// Read message from the client stream.
+		order, err := stream.Recv()
+		// Check for end of stream.
+		if err == io.EOF {
+			// Finished reading the order stream.
+			return stream.SendAndClose(
+				&wrappers.StringValue{Value: "Orders processed " + ordersStr})
+		}
+		// Update order
+		orderMap[order.Id] = *order
+
+		log.Printf("Order ID ", order.Id, ": Updated")
+		ordersStr += order.Id + ", "
+	}
 }
 
 func main() {

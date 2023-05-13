@@ -152,7 +152,7 @@ func main() {
 	log.Print("GetOrder Response -> : ", retrievedOrder)
 }
 ```
-```
+```bash
 2023/05/10 10:23:46 GetOrder Response -> : items:"Banana"  items:"Mango"  description:"Fruit Basket"  price:202  destination:"Fruit Market"
 ```
 
@@ -221,7 +221,15 @@ to the client.
 		log.Print("Search Result : ", searchOrder)
 	}
 ```
+```bash
+2023/05/13 19:04:08 GetOrder Response -> : items:"Banana" items:"Mango" description:"Fruit Basket" price:202 destination:"Fruit Market"
+2023/05/13 19:04:08 
+-----------------------------------------------------------------------------
+2023/05/13 19:04:08 Search Result : items:"Mouse" items:"KeyBoard" description:"Digital Basket" price:202 destination:"Digital Market"
+2023/05/13 19:04:08 
+```
 we retrieve messages from the client-side stream using the `Recv()` method and keep doing so until we reach the end of the stream.
+
 
 ## Client-Streaming RPC
 The client sends multiple messages to the server instead of a single request. The server sends back a single response to the client. However, the server does not necessarily have to wait until it receives all the messages from the client side to send a response. Based on this logic you may send the response after reading one or a few messages from the stream or after reading all the messages.
@@ -251,5 +259,67 @@ service OrderManagement {
 In server side you may read a few messages or all the messages until the end of the stream. The service can send its response simply by calling the `SendAndClose` method of the `OrderManagement_UpdateOrdersServer` object, which also marks the end of the stream for server-side messages. If the server decides to prematurely stop reading from the client’s stream, the server should cancel the client stream so the client knows to stop producing messages.
 
 ```go
+func (s *server) UpdateOrders(stream pb.OrderManagement_UpdateOrdersServer) error {
+	ordersStr := "Updated Order IDs : "
+	for {
+		// Read message from the client stream.
+		order, err := stream.Recv()
+		// Check for end of stream.
+		if err == io.EOF {
+			// Finished reading the order stream.
+			return stream.SendAndClose(
+				&wrappers.StringValue{Value: "Orders processed " + ordersStr})
+		}
+		// Update order
+		orderMap[order.Id] = *order
 
+		log.Printf("Order ID ", order.Id, ": Updated")
+		ordersStr += order.Id + ", "
+	}
+}
 ```
+
+### Client Code
+Once all the messages are streamed the client can mark the end of the stream and receive the response from the service.
+
+```go
+	// Update Orders : Client streaming scenario
+	updOrder1 := pb.Order{Id: "102", Items: []string{"Google Pixel 3A", "Google Pixel Book"}, Destination: "Mountain View, CA", Price: 1100.00}
+	updOrder2 := pb.Order{Id: "103", Items: []string{"Apple Watch S4", "Mac Book Pro", "iPad Pro"}, Destination: "San Jose, CA", Price: 2800.00}
+	updOrder3 := pb.Order{Id: "104", Items: []string{"Google Home Mini", "Google Nest Hub", "iPad Mini"}, Destination: "Mountain View, CA", Price: 2200.00}
+
+	// Updating order 1
+	if err := updateStream.Send(&updOrder1); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", updateStream, updOrder1, err)
+	}
+	// Updating order 2
+	if err := updateStream.Send(&updOrder2); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", updateStream, updOrder2, err)
+	}
+	// Updating order 3
+	if err := updateStream.Send(&updOrder3); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", updateStream, updOrder3, err)
+	}
+
+	// Closing the stream and receiving the response.
+	updateRes, err := updateStream.CloseAndRecv()
+	if err != nil {
+		log.Fatalf("%v.CloseAndRecv() got error %v, want %v",
+			updateStream, err, nil)
+	}
+	log.Printf("Update Orders Res : %s", updateRes)
+```
+
+```bash
+2023/05/13 19:04:08 GetOrder Response -> : items:"Banana" items:"Mango" description:"Fruit Basket" price:202 destination:"Fruit Market"
+2023/05/13 19:04:08 
+-----------------------------------------------------------------------------
+2023/05/13 19:04:08 Search Result : items:"Mouse" items:"KeyBoard" description:"Digital Basket" price:202 destination:"Digital Market"
+2023/05/13 19:04:08 
+-----------------------------------------------------------------------------
+2023/05/13 19:04:08 Update Orders Res : value:"Orders processed Updated Order IDs : 102, 103, 104, "
+2023/05/13 19:04:08 
+-----------------------------------------------------------------------------
+```
+
+## Bidirectional-Streaming RPC
