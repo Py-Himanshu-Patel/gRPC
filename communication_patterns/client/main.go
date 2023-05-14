@@ -94,5 +94,50 @@ func main() {
 	log.Printf("Update Orders Res : %s", updateRes)
 
 	log.Print("\n-----------------------------------------------------------------------------\n")
+	// ======== bidirectional streaming client ========
+	streamProcOrder, err := ordMgmtClient.ProcessOrders(ctx)
+	if err != nil {
+		log.Fatalf("%v.ProcessOrders(_) = _, %v", ordMgmtClient, err)
+	}
 
+	if err := streamProcOrder.Send(&wrappers.StringValue{Value: "102"}); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", ordMgmtClient, "102", err)
+	}
+	if err := streamProcOrder.Send(&wrappers.StringValue{Value: "103"}); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", ordMgmtClient, "103", err)
+	}
+	if err := streamProcOrder.Send(&wrappers.StringValue{Value: "104"}); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", ordMgmtClient, "104", err)
+	}
+
+	// make a channel to let the goroutine wait before fetching new record from
+	// server stream before the previous one is consumed
+	channel := make(chan struct{})
+	// Invoke the function using Goroutines to read the messages in parallel from the service.
+	go asyncClientBidirectionalRPC(streamProcOrder, channel)
+	// Mimic a delay when sending some messages to the service.
+	time.Sleep(time.Millisecond * 500)
+
+	if err := streamProcOrder.Send(&wrappers.StringValue{Value: "101"}); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", ordMgmtClient, "101", err)
+	}
+	// Mark the end of stream for the client stream (order IDs).
+	if err := streamProcOrder.CloseSend(); err != nil {
+		log.Fatal(err)
+	}
+	channel <- struct{}{}
+}
+
+func asyncClientBidirectionalRPC(streamProcOrder pb.OrderManagement_ProcessOrdersClient, c chan struct{}) {
+	for {
+		// Read service’s messages on the client side. until the end of stream
+		combinedShipment, errProcOrder := streamProcOrder.Recv()
+		if errProcOrder == io.EOF {
+			break
+		}
+		if combinedShipment != nil {
+			log.Printf("Combined shipment : %s", combinedShipment.OrdersList)
+		}
+	}
+	<-c
 }

@@ -26,6 +26,7 @@ type OrderManagementClient interface {
 	GetOrder(ctx context.Context, in *wrappers.StringValue, opts ...grpc.CallOption) (*Order, error)
 	SearchOrders(ctx context.Context, in *wrappers.StringValue, opts ...grpc.CallOption) (OrderManagement_SearchOrdersClient, error)
 	UpdateOrders(ctx context.Context, opts ...grpc.CallOption) (OrderManagement_UpdateOrdersClient, error)
+	ProcessOrders(ctx context.Context, opts ...grpc.CallOption) (OrderManagement_ProcessOrdersClient, error)
 }
 
 type orderManagementClient struct {
@@ -111,6 +112,37 @@ func (x *orderManagementUpdateOrdersClient) CloseAndRecv() (*wrappers.StringValu
 	return m, nil
 }
 
+func (c *orderManagementClient) ProcessOrders(ctx context.Context, opts ...grpc.CallOption) (OrderManagement_ProcessOrdersClient, error) {
+	stream, err := c.cc.NewStream(ctx, &OrderManagement_ServiceDesc.Streams[2], "/ecommerce.OrderManagement/processOrders", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &orderManagementProcessOrdersClient{stream}
+	return x, nil
+}
+
+type OrderManagement_ProcessOrdersClient interface {
+	Send(*wrappers.StringValue) error
+	Recv() (*CombinedShipment, error)
+	grpc.ClientStream
+}
+
+type orderManagementProcessOrdersClient struct {
+	grpc.ClientStream
+}
+
+func (x *orderManagementProcessOrdersClient) Send(m *wrappers.StringValue) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *orderManagementProcessOrdersClient) Recv() (*CombinedShipment, error) {
+	m := new(CombinedShipment)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // OrderManagementServer is the server API for OrderManagement service.
 // All implementations must embed UnimplementedOrderManagementServer
 // for forward compatibility
@@ -118,6 +150,7 @@ type OrderManagementServer interface {
 	GetOrder(context.Context, *wrappers.StringValue) (*Order, error)
 	SearchOrders(*wrappers.StringValue, OrderManagement_SearchOrdersServer) error
 	UpdateOrders(OrderManagement_UpdateOrdersServer) error
+	ProcessOrders(OrderManagement_ProcessOrdersServer) error
 	mustEmbedUnimplementedOrderManagementServer()
 }
 
@@ -133,6 +166,9 @@ func (UnimplementedOrderManagementServer) SearchOrders(*wrappers.StringValue, Or
 }
 func (UnimplementedOrderManagementServer) UpdateOrders(OrderManagement_UpdateOrdersServer) error {
 	return status.Errorf(codes.Unimplemented, "method UpdateOrders not implemented")
+}
+func (UnimplementedOrderManagementServer) ProcessOrders(OrderManagement_ProcessOrdersServer) error {
+	return status.Errorf(codes.Unimplemented, "method ProcessOrders not implemented")
 }
 func (UnimplementedOrderManagementServer) mustEmbedUnimplementedOrderManagementServer() {}
 
@@ -212,6 +248,32 @@ func (x *orderManagementUpdateOrdersServer) Recv() (*Order, error) {
 	return m, nil
 }
 
+func _OrderManagement_ProcessOrders_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(OrderManagementServer).ProcessOrders(&orderManagementProcessOrdersServer{stream})
+}
+
+type OrderManagement_ProcessOrdersServer interface {
+	Send(*CombinedShipment) error
+	Recv() (*wrappers.StringValue, error)
+	grpc.ServerStream
+}
+
+type orderManagementProcessOrdersServer struct {
+	grpc.ServerStream
+}
+
+func (x *orderManagementProcessOrdersServer) Send(m *CombinedShipment) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *orderManagementProcessOrdersServer) Recv() (*wrappers.StringValue, error) {
+	m := new(wrappers.StringValue)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // OrderManagement_ServiceDesc is the grpc.ServiceDesc for OrderManagement service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -233,6 +295,12 @@ var OrderManagement_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "updateOrders",
 			Handler:       _OrderManagement_UpdateOrders_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "processOrders",
+			Handler:       _OrderManagement_ProcessOrders_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 	},

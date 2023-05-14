@@ -9,10 +9,11 @@ service OrderManagement {
   rpc getOrder(google.protobuf.StringValue) returns (Order);
   rpc searchOrders(google.protobuf.StringValue) returns (stream Order);
   rpc updateOrders(stream Order) returns (google.protobuf.StringValue);
+  rpc processOrders(stream google.protobuf.StringValue) returns (stream CombinedShipment);
 }
 
 // Define the Order type
-message Order  {
+message Order {
   string id = 1;
   // repeated is used to represent the fields that can be repeated 
   // any number of times including zero in a message
@@ -20,4 +21,10 @@ message Order  {
   string description = 3;
   float price = 4;
   string destination = 5;
+}
+
+message CombinedShipment {
+  string id = 1;
+  string status = 2;
+  repeated Order ordersList = 3;
 }
