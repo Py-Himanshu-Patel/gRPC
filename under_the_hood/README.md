@@ -71,12 +71,41 @@ content-type = application/grpc
 
 ## Understanding the Message Flow in gRPC Communication Patterns
 ### Simple RPC
+In simple RPC you always have a single request and a single response in the communication between the gRPC server and gRPC client. The
+request message contains headers followed by a length-prefixed message, which can span one or more data frames. An end of stream (EOS) flag is added at the end of the message to half-close the connection at the client side and mark the end of the request message. Here “half-close the connection” means the client closes the connection on its side so the client is no longer able to send messages to the server but still can listen to the incoming messages from the server. The server creates the response message only after receiving the complete message on the server side. The response message contains a header frame followed by a length-prefixed message. Communication ends once the server sends the trailing header with status details.
+
+<div align="center">
+    <img src="images/simple-grpc-message-flow.png">
+</div>
+
+---
 
 ### Server-streaming RPC
+From the client perspective, both simple RPC and server-streaming RPC have the same request message flow. In both cases, we send one request message. The main difference is on the server side. Rather than sending one response message to the client, the server sends multiple messages. The server waits until it receives the completed request message and sends the response headers and multiple length-prefixed messages. Communication ends once the server sends the trailing header with status details.
+
+<div align="center">
+    <img src="images/server-stream-message-flow.png">
+</div>
+
+---
 
 ### Client-streaming RPC
+In client-streaming RPC, the client sends multiple messages to the server and the server sends one response message in reply. The client first sets up the connection with the server by sending the header frames. Once the connection is set up, the client sends multiple length-prefixed messages as data frames to the server. In the end, the client half-closes the connection by sending an EOS flag in the last data frame. In the meantime, the server reads the messages received from the client. Once it receives all messages, the server sends a response message along with the trailing header and closes the connection.
+
+<div align="center">
+    <img src="images/client-streaming-message-flow.png">
+</div>
+
+---
 
 ### Bidirectional-streaming RPC
+In this pattern, the client sets up the connection by sending header frames. Once the connection is set up, the client and server both send length-prefixed messages without waiting for the other to finish. Both client and server send messages simultaneously. Both can end the connection at their side, meaning they can’t send any more messages. 
+
+<div align="center">
+    <img src="images/bidirectional-streaming-message-flow.png">
+</div>
+
+---
 
 ## gRPC Implementation Architecture
 gRPC is natively supported by the C/C++, Go, and Java languages. gRPC also provides language bindings in many popular languages such as Python, Ruby, PHP, etc. These language bindings are wrappers over the low-level C API.
