@@ -86,13 +86,22 @@ func main() {
 	// the Context object contains metadata such as the identity
 	// of the end user, authorization tokens, and the request’s
 	// deadline and it will exist during the lifetime of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+
+	// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// defer cancel()
+
+	// Create a context to pass with remote call. This time we are using deadline
+	// of 2 sec for entire call. This is different than timeout
+	clientDeadline := time.Now().Add(time.Duration(2 * time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), clientDeadline)
 	defer cancel()
 
 	// call GetOrder method with product details
 	retrievedOrder, err := ordMgmtClient.GetOrder(ctx, &wrappers.StringValue{Value: "106"})
 	if err != nil {
-		log.Fatalf("Could not add product: %v", err)
+		// If the invocation exceeds the specified deadline, it should return
+		// an error of the type DEADLINE_EXCEEDED
+		log.Fatalf("Could not get product: %v", err)
 	}
 	log.Print("GetOrder Response -> : ", retrievedOrder)
 
