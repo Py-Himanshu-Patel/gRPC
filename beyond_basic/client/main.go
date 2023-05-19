@@ -15,10 +15,65 @@ const (
 	address = "localhost:8000"
 )
 
+func orderUnaryClientInterceptor(ctx context.Context,
+	method string, req, reply interface{}, cc *grpc.ClientConn,
+	invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	// Preprocessor phase:  has access to the RPC request prior to sending it out to the server.
+	log.Println("Method : " + method)
+	// Invoking the remote method via UnaryInvoker
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	// Postprocessor phase
+	log.Println(reply)
+	// return error back to grpc client
+	return err
+}
+
+// a wrapper on client stream
+type wrappedStream struct {
+	grpc.ClientStream
+}
+
+func (w *wrappedStream) RecvMsg(m interface{}) error {
+	log.Printf("====== [Client Stream Interceptor] "+
+		"Receive a message (Type: %T) at %v",
+		m, time.Now().Format(time.RFC3339))
+	return w.ClientStream.RecvMsg(m)
+}
+
+func (w *wrappedStream) SendMsg(m interface{}) error {
+	log.Printf("====== [Client Stream Interceptor] "+
+		"Send a message (Type: %T) at %v",
+		m, time.Now().Format(time.RFC3339))
+	return w.ClientStream.SendMsg(m)
+}
+
+// get the wrapped stream of grpc by passing the actual stream
+func newWrappedStream(s grpc.ClientStream) grpc.ClientStream {
+	return &wrappedStream{s}
+}
+
+func clientStreamInterceptor(ctx context.Context, desc *grpc.StreamDesc,
+	cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	log.Println("======= [Client Interceptor] ", method)
+	s, err := streamer(ctx, desc, cc, method, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return newWrappedStream(s), nil
+}
+
 func main() {
 	// Set up a connection with the server from the
 	// provided address ("localhost: 8000")
-	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	// Setting up a connection to the server.
+	conn, err := grpc.Dial(
+		address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(orderUnaryClientInterceptor),
+		grpc.WithStreamInterceptor(clientStreamInterceptor))
+	// conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}

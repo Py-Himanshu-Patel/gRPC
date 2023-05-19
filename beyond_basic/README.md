@@ -106,4 +106,93 @@ func main() {
 ```
 
 ### Client-Side Interceptors
+When a client invokes an RPC call to invoke a remote method of a gRPC service, you can intercept those RPC calls on the client side. Applicable to both unary and streaming calls.
 
+This is particularly useful when you need to implement certain reusable features, such as securely calling a gRPC service outside the client application code.
+
+<div align="center">
+  <img src="images/client-side-interceptor.png">
+</div>
+
+---
+
+#### Client-Side - Unary interceptor
+A client-side unary RPC interceptor is used for intercepting the unary RPC client side. `UnaryClientInterceptor` is the type for a client-side unary interceptor that has a function signature as follows.
+
+```go
+func orderUnaryClientInterceptor(ctx context.Context,
+	method string, req, reply interface{}, cc *grpc.ClientConn,
+	invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	// Preprocessor phase
+	log.Println("Method : " + method)
+	// Invoking the remote method
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	// Postprocessor phase
+	log.Println(reply)
+	return err
+}
+
+func main() {
+  ...
+  // Setting up a connection to the server.
+	conn, err := grpc.Dial(
+		address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(orderUnaryClientInterceptor))
+  ...
+}
+```
+
+#### Client-Side - Stream interceptor
+The client-side streaming interceptor intercepts any streaming RPC calls that the gRPC client deals with. The implementation of the client-side stream interceptor is
+quite similar to that of the server side.
+
+```go
+// a wrapper on client stream
+type wrappedStream struct {
+	grpc.ClientStream
+}
+
+func (w *wrappedStream) RecvMsg(m interface{}) error {
+	log.Printf("====== [Client Stream Interceptor] "+
+		"Receive a message (Type: %T) at %v",
+		m, time.Now().Format(time.RFC3339))
+	return w.ClientStream.RecvMsg(m)
+}
+
+func (w *wrappedStream) SendMsg(m interface{}) error {
+	log.Printf("====== [Client Stream Interceptor] "+
+		"Send a message (Type: %T) at %v",
+		m, time.Now().Format(time.RFC3339))
+	return w.ClientStream.SendMsg(m)
+}
+
+// get the wrapped stream of grpc by passing the actual stream
+func newWrappedStream(s grpc.ClientStream) grpc.ClientStream {
+	return &wrappedStream{s}
+}
+
+func clientStreamInterceptor(ctx context.Context, desc *grpc.StreamDesc,
+	cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	log.Println("======= [Client Interceptor] ", method)
+	s, err := streamer(ctx, desc, cc, method, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return newWrappedStream(s), nil
+}
+
+
+func main() {
+  ...
+	// Setting up a connection to the server.
+	conn, err := grpc.Dial(
+		address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(orderUnaryClientInterceptor),
+		grpc.WithStreamInterceptor(clientStreamInterceptor))
+  ...
+}
+```
+
+## Deadlines
