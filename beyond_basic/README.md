@@ -225,3 +225,20 @@ When it comes to deadlines in gRPC, both the client and server can make their ow
 For instance, in our example, when the client meets the `DEADLINE_EXCEEDED` condition, the service may still try to respond. So, the service application needs to determine whether the current RPC is still valid or not. From the server side, you can also detect when the client has reached the deadline specified when invoking the RPC. Inside the AddOrder operation, you can check for `ctx.Err() == context.DeadlineExceeded` to find out whether the client has already met the deadline exceeded state, and then abandon the RPC at the server side and return an error (this is often implemented using a nonblocking select construct in Go).
 
 ## Cancellation
+When either the client or server application wants to terminate the RPC this can be done by canceling the RPC. Once the RPC is canceled, no further RPC-related messaging can be done and the fact that one party has canceled the RPC is propagated to the other side.
+
+In client RPC
+```go
+func main() {
+  ...
+	clientDeadline := time.Now().Add(time.Duration(2 * time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), clientDeadline)
+	
+  // Canceling the RPC
+  cancel()
+  ...
+}
+```
+Once you have the reference to `cancel`, you can call it at any location where you intend to terminate the RPC.
+
+When one party cancels the RPC, the other party can determine it by checking the `context`. In this example, the server application can check whether the current context is canceled by using `stream.Context().Err() == context.Canceled`.
