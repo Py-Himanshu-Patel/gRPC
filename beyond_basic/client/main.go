@@ -4,8 +4,11 @@ import (
 	pb "OrderManagement/ecommerce"
 	"context"
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"io"
 	"log"
 	"time"
@@ -95,6 +98,38 @@ func main() {
 	clientDeadline := time.Now().Add(time.Duration(2 * time.Second))
 	ctx, cancel := context.WithDeadline(context.Background(), clientDeadline)
 	defer cancel()
+
+	log.Print("\n-----------------------------------------------------------------------------\n")
+
+	// Add Order
+	// This is an invalid order
+	order1 := pb.Order{Id: "-1", Items: []string{"iPhone XS", "Mac Book Pro"}, Destination: "San Jose, CA", Price: 2300.00}
+	res, addOrderError := ordMgmtClient.AddOrder(ctx, &order1)
+
+	if addOrderError != nil {
+		// extract the error code out of status received
+		errorCode := status.Code(addOrderError)
+		// match the error code for InvlidArgumet
+		if errorCode == codes.InvalidArgument {
+			log.Printf("Invalid Argument Error : %s", errorCode)
+			// convert the error response to get more details or print as is.
+			errorStatus := status.Convert(addOrderError)
+			for _, d := range errorStatus.Details() {
+				switch info := d.(type) {
+				case *epb.BadRequest_FieldViolation:
+					log.Printf("Request Field Invalid: %s", info)
+				default:
+					log.Printf("Unexpected error type: %s", info)
+				}
+			}
+		} else {
+			log.Printf("Unhandled error : %s ", errorCode)
+		}
+	} else {
+		log.Print("AddOrder Response -> ", res.Value)
+	}
+
+	log.Print("\n-----------------------------------------------------------------------------\n")
 
 	// call GetOrder method with product details
 	retrievedOrder, err := ordMgmtClient.GetOrder(ctx, &wrappers.StringValue{Value: "106"})

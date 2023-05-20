@@ -242,3 +242,99 @@ func main() {
 Once you have the reference to `cancel`, you can call it at any location where you intend to terminate the RPC.
 
 When one party cancels the RPC, the other party can determine it by checking the `context`. In this example, the server application can check whether the current context is canceled by using `stream.Context().Err() == context.Canceled`.
+
+## Error Handling
+When an error occurs, gRPC returns one of its error-status codes with an optional error message that provides more details of the error condition.
+
+The status object is composed of an integer code and a string message that are common to all gRPC implementations for different languages.
+
+| Code                | Number | Description                                                                                             |
+|---------------------|--------|---------------------------------------------------------------------------------------------------------|
+| OK                  | 0      | Success status                                                                                          |
+| CANCELLED           | 1      | The operation was canceled (by the caller)                                                              |
+| UNKNOWN             | 2      | Unknown error                                                                                           |
+| INVALID_ARGUMENT    | 3      | The client specified an invalid argument.                                                               |
+| DEADLINE_EXCEEDED   | 4      | The deadline expired before the operation could complete.                                               |
+| NOT_FOUND           | 5      | Some requested entity was not found.                                                                    |
+| ALREADY_EXISTS      | 6      | The entity that a client attempted to create already exists.                                            |
+| PERMISSION_DENIED   | 7      | The caller does not have permission to execute the specified operation.                                 |
+| RESOURCE_EXHAUSTED  | 8      | Some resource has been exhausted.                                                                       |
+| FAILED_PRECONDITION | 9      | The operation was rejected because the system is not in a state required for the operation’s execution. |
+| ABORTED             | 10     | The operation was aborted.                                                                              |
+| OUT_OF_RANGE        | 11     | The operation was attempted past the valid range.                                                       |
+| UNIMPLEMENTED       | 12     | The operation is not implemented or is not supported/enabled in this service.                           |
+| INTERNAL            | 13     | Internal errors.                                                                                        |
+| UNAVAILABLE         | 14     | The service is currently unavailable.                                                                   |
+| DATA_LOSS           | 15     | Unrecoverable data loss or corruption.                                                                  |
+| UNAUTHENTICATED     | 16     | The request does not have valid authentication credentials for the operation.                           |
+
+```go
+// server side code
+
+func (s *server) AddOrder(ctx context.Context, orderReq *pb.Order) (*wrappers.StringValue, error) {
+	if orderReq.Id == "-1" {
+		log.Printf("Order ID is invalid! -> Received Order ID %s", orderReq.Id)
+
+		errorStatus := status.New(codes.InvalidArgument, "Invalid information received")
+
+		// Include any error details with an error type BadRequest_FieldViolation from
+		// google.golang.org/genproto/googleapis/rpc/errdetails.
+		ds, err := errorStatus.WithDetails(
+			&epb.BadRequest_FieldViolation{
+				Field:       "ID",
+				Description: fmt.Sprintf("Order ID received is not valid %s : %s", orderReq.Id, orderReq.Description),
+			},
+		)
+		// If there is some error generating the more details error response then return
+		// the error response generated with status.New
+		if err != nil {
+			return nil, errorStatus.Err()
+		}
+		// return the error with details
+		return nil, ds.Err()
+
+	} else {
+		orderMap[orderReq.Id] = *orderReq
+		log.Println("Order : ", orderReq.Id, " -> Added")
+		return &wrappers.StringValue{Value: "Order Added: " + orderReq.Id}, nil
+	}
+}
+```
+
+```go
+// client code
+	// Add Order
+	// This is an invalid order
+	order1 := pb.Order{Id: "-1", Items: []string{"iPhone XS", "Mac Book Pro"}, Destination: "San Jose, CA", Price: 2300.00}
+	res, addOrderError := ordMgmtClient.AddOrder(ctx, &order1)
+
+	if addOrderError != nil {
+		// extract the error code out of status received
+		errorCode := status.Code(addOrderError)
+		// match the error code for InvlidArgumet
+		if errorCode == codes.InvalidArgument {
+			log.Printf("Invalid Argument Error : %s", errorCode)
+			// convert the error response to get more details or print as is.
+			errorStatus := status.Convert(addOrderError)
+			for _, d := range errorStatus.Details() {
+				switch info := d.(type) {
+				case *epb.BadRequest_FieldViolation:
+					log.Printf("Request Field Invalid: %s", info)
+				default:
+					log.Printf("Unexpected error type: %s", info)
+				}
+			}
+		} else {
+			log.Printf("Unhandled error : %s ", errorCode)
+		}
+	} else {
+		log.Print("AddOrder Response -> ", res.Value)
+	}
+```
+
+```bash
+2023/05/20 11:31:16 Invalid Argument Error : InvalidArgument
+2023/05/20 11:31:16 Request Field Invalid: field:"ID" description:"Order ID received is not valid -1 : "
+```
+
+## Multiplexing

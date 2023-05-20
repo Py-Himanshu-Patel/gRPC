@@ -4,6 +4,7 @@ import (
 	pb "OrderManagement/ecommerce"
 	"context"
 	"fmt"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"io"
 	"log"
 	"net"
@@ -25,6 +26,35 @@ var orderMap = make(map[string]pb.Order)
 
 type server struct {
 	pb.UnimplementedOrderManagementServer
+}
+
+func (s *server) AddOrder(ctx context.Context, orderReq *pb.Order) (*wrappers.StringValue, error) {
+	if orderReq.Id == "-1" {
+		log.Printf("Order ID is invalid! -> Received Order ID %s", orderReq.Id)
+
+		errorStatus := status.New(codes.InvalidArgument, "Invalid information received")
+
+		// Include any error details with an error type BadRequest_FieldViolation from
+		// google.golang.org/genproto/googleapis/rpc/errdetails.
+		ds, err := errorStatus.WithDetails(
+			&epb.BadRequest_FieldViolation{
+				Field:       "ID",
+				Description: fmt.Sprintf("Order ID received is not valid %s : %s", orderReq.Id, orderReq.Description),
+			},
+		)
+		// If there is some error generating the more details error response then return
+		// the error response generated with status.New
+		if err != nil {
+			return nil, errorStatus.Err()
+		}
+		// return the error with details
+		return nil, ds.Err()
+
+	} else {
+		orderMap[orderReq.Id] = *orderReq
+		log.Println("Order : ", orderReq.Id, " -> Added")
+		return &wrappers.StringValue{Value: "Order Added: " + orderReq.Id}, nil
+	}
 }
 
 // unary RPC
