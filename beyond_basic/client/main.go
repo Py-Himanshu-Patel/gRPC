@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"io"
 	"log"
@@ -101,10 +102,22 @@ func main() {
 
 	log.Print("\n-----------------------------------------------------------------------------\n")
 
+	// make some metadata
+	md := metadata.Pairs(
+		"timestamp", time.Now().Format(time.StampNano),
+		"hello", "world", // key - value
+	)
+	// make a new context with the metadata
+	newMdCtx := metadata.NewOutgoingContext(context.Background(), md)
+	// append more to outgoing context
+	// ctxA := metadata.AppendToOutgoingContext(newMdCtx, "k1", "v1")
+
+	log.Print("\n-----------------------------------------------------------------------------\n")
+
 	// Add Order
 	// This is an invalid order
 	order1 := pb.Order{Id: "-1", Items: []string{"iPhone XS", "Mac Book Pro"}, Destination: "San Jose, CA", Price: 2300.00}
-	res, addOrderError := ordMgmtClient.AddOrder(ctx, &order1)
+	res, addOrderError := ordMgmtClient.AddOrder(newMdCtx, &order1)
 
 	if addOrderError != nil {
 		// extract the error code out of status received
@@ -131,7 +144,7 @@ func main() {
 
 	log.Print("\n-----------------------------------------------------------------------------\n")
 
-	// call GetOrder method with product details
+	// call GetOrder method with product details, also pass the new Context
 	retrievedOrder, err := ordMgmtClient.GetOrder(ctx, &wrappers.StringValue{Value: "106"})
 	if err != nil {
 		// If the invocation exceeds the specified deadline, it should return
@@ -157,7 +170,14 @@ func main() {
 
 	// ======== client streaming client ========
 	// Invoking UpdateOrders remote method.
-	updateStream, err := ordMgmtClient.UpdateOrders(ctx)
+	updateStream, err := ordMgmtClient.UpdateOrders(newMdCtx)
+
+	// retrieve header
+	header, _ := updateStream.Header()
+	// retrieve trailer
+	trailer := updateStream.Trailer()
+	log.Print("------ UpdateOrders Metadata Header : ", header, " ------")
+	log.Print("------ UpdateOrders Metadata Trailer : ", trailer, " ------")
 
 	// Handling errors related to UpdateOrders.
 	if err != nil {

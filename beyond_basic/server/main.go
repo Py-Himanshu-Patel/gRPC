@@ -14,6 +14,7 @@ import (
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -29,6 +30,9 @@ type server struct {
 }
 
 func (s *server) AddOrder(ctx context.Context, orderReq *pb.Order) (*wrappers.StringValue, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	log.Println("----  AddOrder Incomming Metadata : ", md, " ------")
+
 	if orderReq.Id == "-1" {
 		log.Printf("Order ID is invalid! -> Received Order ID %s", orderReq.Id)
 
@@ -83,6 +87,18 @@ func (s *server) SearchOrders(searchQuery *wrappers.StringValue, stream pb.Order
 }
 
 func (s *server) UpdateOrders(stream pb.OrderManagement_UpdateOrdersServer) error {
+	// OPTIONAL: receive and check the metadata in the stream requests
+	md, _ := metadata.FromIncomingContext(stream.Context())
+	log.Println("----  UpdateOrders Incomming Metadata : ", md, " ------")
+
+	// OPTIONAL: pass the metadata back to client
+	// create and send header
+	header := metadata.Pairs("header-key", "header-val")
+	stream.SendHeader(header)
+	// create and set trailer
+	trailer := metadata.Pairs("trailer-key", "trailer-val")
+	stream.SetTrailer(trailer)
+
 	ordersStr := "Updated Order IDs : "
 	for {
 		// Read message from the client stream.

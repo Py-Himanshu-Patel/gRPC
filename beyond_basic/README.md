@@ -388,4 +388,119 @@ server process. This allows a service to accommodate legacy clients after a brea
 contract is no longer in use, it can be removed from the server.
 
 ## Metadata
+You may want to share information about the RPC calls that are not related to the business context of the RPC, so they shouldn’t be part of the RPC
+arguments. In such cases, you can use gRPC metadata that you can send or receive from either the gRPC service or the gRPC client using gRPC headers. Metadata is structured in the form of a list of key(string)/value pairs.
 
+<div align="center">
+  <img src="images/metadata.png">
+</div>
+
+
+### Creating and Retrieving Metadata
+
+- Creating
+```go
+// Metadata Creation : option I
+md := metadata.New(map[string]string{"key1": "val1", "key2": "val2"})
+// Metadata Creation : option II  
+// so that metadata with the same key will get merged into a list
+md := metadata.Pairs(
+  "key1", "val1",
+  "key1", "val1-2", // "key1" will have map value []string{"val1", "val1-2"}
+  "key2", "val2",
+)
+```
+
+- Reading
+```go
+func (s *server) AddOrder(ctx context.Context, orderReq *pb.Order) (*wrappers.StringValue, error) {
+  md, metadataAvailable := metadata.FromIncomingContext(ctx)
+  // read the required metadata from the ‘md’ metadata map.
+}
+```
+
+### Sending and Receiving Metadata: Client Side
+We can create a new context with the new metadata using NewOutgoingContext, or simply append the metadata to the existing context using AppendToOutgoingContext. Using NewOutgoingContext, however, replaces any existing metadata in the context. Once you create a context with the required metadata, it can be used either for unary or streaming RPC
+
+#### Sending metadata from the gRPC client side
+```go
+md := metadata.Pairs(
+  "timestamp", time.Now().Format(time.StampNano),
+  "kn", "vn",
+)
+// a new context
+mdCtx := metadata.NewOutgoingContext(context.Background(), md)
+// previous updated context
+ctxA := metadata.AppendToOutgoingContext(mdCtx,
+"k1", "v1", "k1", "v2", "k2", "v3")
+
+// make unary RPC
+response, err := client.SomeRPC(ctxA, someRequest)
+// or make streaming RPC
+stream, err := client.SomeStreamingRPC(ctxA)
+```
+Therefore, when it comes to receiving metadata from the client side, you need to treat them as either headers or trailers.
+
+#### Reading metadata on the gRPC client side
+```go
+// variable to store header and trailer returned from the RPC call
+var header, trailer metadata.MD
+
+// ***** Unary RPC *****
+// pass pointer to header and trailer not the value
+r, err := client.SomeRPC(
+  ctx,
+  someRequest,
+  grpc.Header(&header),
+  grpc.Trailer(&trailer),
+)
+// process header and trailer map here.
+
+// ***** Streaming RPC *****
+stream, err := client.SomeStreamingRPC(ctx)
+// retrieve header
+header, err := stream.Header()
+// retrieve trailer
+trailer := stream.Trailer()
+// process header and trailer map here.
+```
+
+### Sending and Receiving Metadata: Server Side
+
+#### Reading metadata on the gRPC server side
+```go
+func (s *server) SomeRPC(ctx context.Context, in *pb.someRequest) (*pb.someResponse, error) {
+  md, ok := metadata.FromIncomingContext(ctx)
+  // do something with metadata
+}
+
+func (s *server) SomeStreamingRPC(stream pb.Service_SomeStreamingRPCServer) error {
+  md, ok := metadata.FromIncomingContext(stream.Context())
+  // do something with metadata
+}
+```
+
+#### Sending metadata from the gRPC server side
+To send metadata from the server side, send a header with metadata or set a trailer with metadata.
+
+```go
+func (s *server) SomeRPC(ctx context.Context, in *pb.someRequest) (*pb.someResponse, error) {
+  // create and send header
+  header := metadata.Pairs("header-key", "val")
+  grpc.SendHeader(ctx, header)
+  // create and set trailer
+  trailer := metadata.Pairs("trailer-key", "val")
+  grpc.SetTrailer(ctx, trailer)
+}
+
+func (s *server) SomeStreamingRPC(stream pb.Service_SomeStreamingRPCServer) error {
+  // create and send header
+  header := metadata.Pairs("header-key", "val")
+  stream.SendHeader(header)
+  // create and set trailer
+  trailer := metadata.Pairs("trailer-key", "val")
+  stream.SetTrailer(trailer)
+}
+```
+
+## Name Resolver
