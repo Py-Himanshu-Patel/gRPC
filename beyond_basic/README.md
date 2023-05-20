@@ -338,3 +338,54 @@ func (s *server) AddOrder(ctx context.Context, orderReq *pb.Order) (*wrappers.St
 ```
 
 ## Multiplexing
+gRPC allows you to run multiple gRPC services on the same gRPC server. Client application can reuse the same connection to invoke both the services as required. This capability is known as multiplexing.
+
+<div align="center">
+  <img src="images/multiplexing.png">
+</div>
+
+```go
+// server side
+func main() {
+  ...
+  initSampleData()
+  lis, err := net.Listen("tcp", port)
+  if err != nil {
+    log.Fatalf("failed to listen: %v", err)
+  }
+  grpcServer := grpc.NewServer()
+
+  // Register Order Management service on gRPC orderMgtServer
+  ordermgt_pb.RegisterOrderManagementServer(grpcServer, &orderMgtServer{})
+  // Register Greeter Service on gRPC orderMgtServer
+  hello_pb.RegisterGreeterServer(grpcServer, &helloServer{})
+  ...
+}
+```
+
+```go
+// client side
+// Setting up a connection to the server.
+conn, err := grpc.Dial(address, grpc.WithInsecure())
+...
+// Using the created gRPC connection to create an OrderManagement client.
+orderManagementClient := pb.NewOrderManagementClient(conn)
+...
+// Add Order RPC
+...
+res, addErr := orderManagementClient.AddOrder(ctx, &order1)
+...
+// Using the same gRPC connection to create the Hello service client.
+helloClient := hwpb.NewGreeterClient(conn)
+...
+// Say hello RPC
+helloResponse, err := helloClient.SayHello(hwcCtx,&hwpb.HelloRequest{Name: "gRPC Up and Running!"})
+```
+
+#### Note
+One powerful use for gRPC multiplexing in a microservice architecture is to host multiple major versions of the same service in one
+server process. This allows a service to accommodate legacy clients after a breaking API change. Once the old version of the service
+contract is no longer in use, it can be removed from the server.
+
+## Metadata
+
