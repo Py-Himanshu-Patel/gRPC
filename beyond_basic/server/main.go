@@ -14,6 +14,7 @@ import (
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	_ "google.golang.org/grpc/encoding/gzip" // importing just to make server eligible to accept compressed data
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )

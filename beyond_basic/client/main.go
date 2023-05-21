@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"io"
@@ -117,7 +118,8 @@ func main() {
 	// Add Order
 	// This is an invalid order
 	order1 := pb.Order{Id: "-1", Items: []string{"iPhone XS", "Mac Book Pro"}, Destination: "San Jose, CA", Price: 2300.00}
-	res, addOrderError := ordMgmtClient.AddOrder(newMdCtx, &order1)
+	// we are compressing the gRPC message here using gzip
+	res, addOrderError := ordMgmtClient.AddOrder(newMdCtx, &order1, grpc.UseCompressor(gzip.Name))
 
 	if addOrderError != nil {
 		// extract the error code out of status received

@@ -738,3 +738,34 @@ this is examples/load_balancing (from :50051)
 this is examples/load_balancing (from :50052)
 this is examples/load_balancing (from :50051)
 ```
+
+## Compression
+
+#### Client Code
+```go
+import (
+  "google.golang.org/grpc/encoding/gzip"
+)
+
+func main() {
+  ...
+  res, addOrderError := ordMgmtClient.AddOrder(newMdCtx, &order1, grpc.UseCompressor(gzip.Name))
+  ...
+}
+```
+
+#### Server Code
+```go
+import (
+	_ "google.golang.org/grpc/encoding/gzip" // importing just to make server eligible to accept compressed data
+)
+
+func (s *server) AddOrder(ctx context.Context, orderReq *pb.Order) (*wrappers.StringValue, error) {
+  md, _ := metadata.FromIncomingContext(ctx)
+	log.Println("----  AddOrder Incomming Metadata : ", md, " ------")
+  ...
+}
+```
+```bash
+----  AddOrder Incomming Metadata :  map[:authority:[localhost:8000] content-type:[application/grpc] grpc-accept-encoding:[gzip] hello:[world] timestamp:[May 21 21:56:47.388441599] user-agent:[grpc-go/1.55.0]]  ------
+```
