@@ -8,3 +8,4 @@
 3. [gRPC Communication Patterns](communication_patterns/README.md)
 4. [gRPC - Under the hood](under_the_hood/README.md)
 5. [gRPC: Beyond the Basics](beyond_basic/README.md)
+6. [Secured gRPC](secured_grpc/README.md)
