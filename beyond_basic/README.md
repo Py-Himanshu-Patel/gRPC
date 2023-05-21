@@ -503,4 +503,238 @@ func (s *server) SomeStreamingRPC(stream pb.Service_SomeStreamingRPCServer) erro
 }
 ```
 
-## Name Resolver
+## Load Balancing and NameResolver
+Two main load-balancing mechanisms are commonly used in gRPC: a `load-balancer (LB) proxy` and `client-side load balancing`.
+
+### Load-Balancer Proxy
+In proxy load balancing, the client issues RPCs to the LB proxy. Then the LB proxy distributes the RPC call to one of the available backend gRPC servers that implements the actual logic for serving the call. The LB proxy keeps track of load on each backend server and offers a different load-balancing algorithm for distributing the load among the backend services.
+
+<div align="center">
+  <img src="images/load-balancer.png">
+</div>
+
+The topology of the backend services is not transparent to the gRPC clients, and they are only aware of the load balancer’s endpoint. Therefore, on the client side, you don’t need to make any changes to cater to a load-balancing use case, apart from using the
+load balancer’s endpoint as the destination for all your gRPC connections. The backend services can report the load status back to the load balancer so that it can use that information for the load-balancing logic. load-balancing solutions such as `Nginx`, `Envoy proxy`, etc.
+
+If you don’t use a gRPC load balancer, then you can implement the load-balancing logic as part of the client applications you write. That is client side load balancing.
+
+### Client-Side Load Balancing
+Rather than having an intermediate proxy layer for load balancing, you can implement the load-balancing logic at the gRPC client level. In this method, the client is aware of multiple backend gRPC servers and chooses one to use for each RPC. The load-balancing logic may be entirely developed as part of the client application (also known as `thick client`) or it can be implemented in a dedicated server known as `lookaside load balancer`. Then the client can query it to obtain the best gRPC server to connect to. The client directly connects to the gRPC server address obtained by the lookaside load balancer.
+
+<div align="center">
+  <img src="images/client-side-loadbalancer.png">
+</div>
+
+Suppose we have two backend gRPC services running an echo server on `:50051` and `:50052`. These two servers as two members of an echo gRPC service cluster. Suppose we want to build a gRPC client application that uses the round-robin algorithm when selecting the
+gRPC server endpoint and another client that uses the first endpoint of the server endpoint list. 
+
+We will see a thick client implementation. The client is dialing `example:///lb.example.grpc.io`. So, we are using the `example` as **scheme** name and `lb.example.grpc.io` as the **server** name.
+
+Based on this scheme, it will look for a name resolver to discover the absolute value for the backend service address. Based on the list of values the name resolver returns, gRPC runs different load-balancing algorithms against those servers. The behavior is configured with `grpc.WithBalancerName("round_robin")`.
+
+### Server Code
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net"
+	"sync"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	ecpb "google.golang.org/grpc/examples/features/proto/echo"
+	"google.golang.org/grpc/status"
+)
+
+var (
+	addrs = []string{":50051", ":50052"}
+)
+
+type ecServer struct {
+	ecpb.EchoServer
+	addr string
+}
+
+func (s *ecServer) UnaryEcho(ctx context.Context, req *ecpb.EchoRequest) (*ecpb.EchoResponse, error) {
+	return &ecpb.EchoResponse{Message: fmt.Sprintf("%s (from %s)", req.Message, s.addr)}, nil
+}
+func (s *ecServer) ServerStreamingEcho(*ecpb.EchoRequest, ecpb.Echo_ServerStreamingEchoServer) error {
+	return status.Errorf(codes.Unimplemented, "not implemented")
+}
+func (s *ecServer) ClientStreamingEcho(ecpb.Echo_ClientStreamingEchoServer) error {
+	return status.Errorf(codes.Unimplemented, "not implemented")
+}
+func (s *ecServer) BidirectionalStreamingEcho(ecpb.Echo_BidirectionalStreamingEchoServer) error {
+	return status.Errorf(codes.Unimplemented, "not implemented")
+}
+
+func startServer(addr string) {
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	s := grpc.NewServer()
+	ecpb.RegisterEchoServer(s, &ecServer{addr: addr})
+	log.Printf("serving on %s\n", addr)
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+func main() {
+	var wg sync.WaitGroup
+	for _, addr := range addrs {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			startServer(addr)
+		}(addr)
+	}
+	wg.Wait()
+}
+```
+```bash
+$ go run server.go 
+2023/05/21 20:12:08 serving on :50052
+2023/05/21 20:12:08 serving on :50051
+```
+
+### Client Code
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	ecpb "google.golang.org/grpc/examples/features/proto/echo"
+	"google.golang.org/grpc/resolver"
+)
+
+const (
+	exampleScheme      = "example"
+	exampleServiceName = "lb.example.grpc.io"
+)
+
+var addrs = []string{"localhost:50051", "localhost:50052"}
+
+func callUnaryEcho(c ecpb.EchoClient, message string) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	r, err := c.UnaryEcho(ctx, &ecpb.EchoRequest{Message: message})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	fmt.Println(r.Message)
+}
+
+func makeRPCs(cc *grpc.ClientConn, n int) {
+	hwc := ecpb.NewEchoClient(cc)
+	for i := 0; i < n; i++ {
+		callUnaryEcho(hwc, "this is examples/load_balancing")
+	}
+}
+
+func main() {
+	pickfirstConn, err := grpc.Dial(
+		fmt.Sprintf("%s:///%s", exampleScheme, exampleServiceName), // "example:///lb.example.grpc.io"
+		// grpc.WithBalancerName("pick_first"), // "pick_first" is the default, so this DialOption is not necessary.
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer pickfirstConn.Close()
+
+	log.Println("==== Calling helloworld.Greeter/SayHello with pick_first ====")
+	makeRPCs(pickfirstConn, 10)
+
+	// Make another ClientConn with round_robin policy.
+	roundrobinConn, err := grpc.Dial(
+		fmt.Sprintf("%s:///%s", exampleScheme, exampleServiceName), // // "example:///lb.example.grpc.io"
+		// grpc.WithBalancerName("round_robin"),                       // This sets the initial balancing policy.
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
+	)
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer roundrobinConn.Close()
+
+	log.Println("==== Calling helloworld.Greeter/SayHello with round_robin ====")
+	makeRPCs(roundrobinConn, 10)
+}
+
+// Name resolver implementation
+
+type exampleResolverBuilder struct{}
+
+func (*exampleResolverBuilder) Build(
+	target resolver.Target,
+	cc resolver.ClientConn,
+	opts resolver.BuildOptions) (resolver.Resolver, error) {
+	r := &exampleResolver{
+		target: target,
+		cc:     cc,
+		addrsStore: map[string][]string{
+			exampleServiceName: addrs, // "lb.example.grpc.io": "localhost:50051", "localhost:50052"
+		},
+	}
+	r.start()
+	return r, nil
+}
+func (*exampleResolverBuilder) Scheme() string { return exampleScheme } // "example"
+
+type exampleResolver struct {
+	target     resolver.Target
+	cc         resolver.ClientConn
+	addrsStore map[string][]string
+}
+
+func (r *exampleResolver) start() {
+	addrStrs := r.addrsStore[r.target.Endpoint()]
+	addrs := make([]resolver.Address, len(addrStrs))
+	for i, s := range addrStrs {
+		addrs[i] = resolver.Address{Addr: s}
+	}
+	r.cc.UpdateState(resolver.State{Addresses: addrs})
+}
+func (*exampleResolver) ResolveNow(o resolver.ResolveNowOptions) {}
+func (*exampleResolver) Close()                                  {}
+
+func init() {
+	resolver.Register(&exampleResolverBuilder{})
+}
+```
+```bash
+$ go run client.go 
+2023/05/21 20:17:48 ==== Calling helloworld.Greeter/SayHello with pick_first ====
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50051)
+2023/05/21 20:17:48 ==== Calling helloworld.Greeter/SayHello with round_robin ====
+this is examples/load_balancing (from :50052)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50052)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50052)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50052)
+this is examples/load_balancing (from :50051)
+this is examples/load_balancing (from :50052)
+this is examples/load_balancing (from :50051)
+```
