@@ -14,14 +14,7 @@ Before starting know what is SSL encryption
 
 A in depth explanation of Digital Certificate, Self Sign Certificates, CA : https://www.youtube.com/watch?v=qXLD2UHq2vk
 
-## Enabling a One-Way Secured Connection (TLS)
-In a one-way connection, only the client validates the server to ensure that it receives data from the intended server. When establishing the connection between the client and the server, the server shares its public certificate with the client, who then validates the received certificate of server with a CA (Certificate Authority).
-
-To enable TLS, first we need to create the following certificates and keys:
-- `server.key` A private RSA key to sign and authenticate the public key.
-- `server.pem/server.crt` Self-signed X.509 public keys for distribution.
-
-### Generate private RSA Key
+## Generate private RSA Key - For Server
 ```bash
 $ openssl genrsa -out server.key 2048
 Generating RSA key with 2048 bits
@@ -36,7 +29,7 @@ README.md  server.key
 - Here you can also add a passphrase to the key. So you need the passphrase whenever you need to use the key. In this example, we are not going to add a passphrase to the key.
 - We will use this `server.key` on out gRPC server.
 
-### Generate CA and self-signed certificates
+## Generate CA and self-signed certificates
 `CA = Certificate Authority`
 - generate RSA key using OpenSSL, this private key is used to self sign the certificate of CA.
   ```bash
@@ -100,7 +93,7 @@ README.md  server.key
   ```
   The next step is to create a server private key and certificate. Unlike the previous section, we need get the certificate signed by our new Certificate Authority(CA).
 
-### Generate server certificate
+## Generate server certificate
 Once we have the server private key, we can proceed to create a `Certificate Signing Request (CSR)`. This is a formal request asking a CA to sign a certificate, and it contains the public key of the entity requesting the certificate and some information about the entity. This will ensure all client who connect to the server can verify the public key of server from the CA.
 
 - create a certificate signing request
@@ -135,5 +128,57 @@ Once we have the server private key, we can proceed to create a `Certificate Sig
   ca.crt  ca.key  README.md  server.crt  server.csr  server.key
   ```
 - we have created server key(server.key) and server certificate(server.crt). We can use them to enable mutual TLS in server side later
+
+## Generate client key and certificate
+Generating the client certificate is very similar to creating the server certificate.
+```bash
+$ openssl genrsa -out client.key 2048
+
+$ openssl req -new -key client.key -out client.csr
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [AU]:IN
+State or Province Name (full name) [Some-State]:KA
+Locality Name (eg, city) []:BLR
+Organization Name (eg, company) [Internet Widgits Pty Ltd]:LLP
+Organizational Unit Name (eg, section) []:.
+Common Name (e.g. server FQDN or YOUR name) []:*.my-client.com
+Email Address []:
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+
+$ openssl x509 -req -days 3650 -sha256 -in client.csr -CA ca.crt -CAkey ca.key -set_serial 2 -out client.crt
+Certificate request self-signature ok
+subject=C = IN, ST = KA, L = BLR, O = LLP, CN = *.my-client.com
+Enter pass phrase for ca.key:
+
+$ ls
+ca.crt  ca.key  client.crt  client.csr  client.key  README.md  server.crt  server.csr  server.key
+```
+
+## Convert server/client keys to pem format
+```bash
+$ openssl pkcs8 -topk8 -inform pem -in server.key -outform pem -nocrypt -out server.pem
+$ openssl pkcs8 -topk8 -inform pem -in client.key -outform pem -nocrypt -out client.pem
+
+$ ls
+ca.crt  client.crt  client.key  README.md   server.csr  server.pem
+ca.key  client.csr  client.pem  server.crt  server.key
+```
+
+## Enabling a One-Way Secured Connection (TLS)
+In a one-way connection, only the client validates the server to ensure that it receives data from the intended server. When establishing the connection between the client and the server, the server shares its public certificate with the client, who then validates the received certificate of server with a CA (Certificate Authority).
+
+To enable TLS, first we need to create the following certificates and keys:
+- `server.key` A private RSA key to sign and authenticate the public key.
+- `server.pem/server.crt` Self-signed X.509 public keys for distribution.
 
 ## Enabling a One-Way Secured Connection (Mutual TLS - mTLS)
