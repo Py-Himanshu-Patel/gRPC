@@ -101,6 +101,39 @@ README.md  server.key
   The next step is to create a server private key and certificate. Unlike the previous section, we need get the certificate signed by our new Certificate Authority(CA).
 
 ### Generate server certificate
+Once we have the server private key, we can proceed to create a `Certificate Signing Request (CSR)`. This is a formal request asking a CA to sign a certificate, and it contains the public key of the entity requesting the certificate and some information about the entity. This will ensure all client who connect to the server can verify the public key of server from the CA.
 
+- create a certificate signing request
+  ```bash
+  $ openssl req -new -sha256 -key server.key -out server.csr
+
+  Country Name (2 letter code) [AU]:IN
+  State or Province Name (full name) [Some-State]:KA
+  Locality Name (eg, city) []:BLR
+  Organization Name (eg, company) [Internet Widgits Pty Ltd]:LLP
+  Organizational Unit Name (eg, section) []:Engineering
+  Common Name (e.g. server FQDN or YOUR name) []:*.my-server.com
+  Email Address []:
+
+  Please enter the following 'extra' attributes
+  to be sent with your certificate request
+  A challenge password []:privateserver
+  An optional company name []:LLP
+
+  $ ls
+  ca.crt  ca.key  README.md  server.csr  server.key
+  ```
+- After a CSR is generated, we can sign the request and generate the certificate using our own CA certificate. Normally, the CA and the certificate requester are two different companies who don’t want to share their private keys. 
+- use our root CA to sign the CSR and create server certificate.
+  ```bash
+  $ openssl x509 -req -days 3650 -sha256 -in server.csr -CA ca.crt -CAkey ca.key -set_serial 1 -out server.crt
+  Certificate request self-signature ok
+  subject=C = IN, ST = KA, L = BLR, O = LLP, OU = Engineering, CN = *.my-server.com
+  Enter pass phrase for ca.key:
+
+  $ ls
+  ca.crt  ca.key  README.md  server.crt  server.csr  server.key
+  ```
+- we have created server key(server.key) and server certificate(server.crt). We can use them to enable mutual TLS in server side later
 
 ## Enabling a One-Way Secured Connection (Mutual TLS - mTLS)
