@@ -94,6 +94,10 @@ README.md  server.key
   The next step is to create a server private key and certificate. Unlike the previous section, we need get the certificate signed by our new Certificate Authority(CA).
 
 ## Generate server certificate
+To enable TLS, first we need to create the following certificates and keys:
+- `server.key` A private RSA key to sign and authenticate the public key.
+- `server.pem/server.crt` Self-signed X.509 public keys for distribution.
+
 Once we have the server private key, we can proceed to create a `Certificate Signing Request (CSR)`. This is a formal request asking a CA to sign a certificate, and it contains the public key of the entity requesting the certificate and some information about the entity. This will ensure all client who connect to the server can verify the public key of server from the CA.
 
 - create a certificate signing request
@@ -174,11 +178,133 @@ ca.crt  client.crt  client.key  README.md   server.csr  server.pem
 ca.key  client.csr  client.pem  server.crt  server.key
 ```
 
+## A proto file for following examples
+```protobuf
+syntax = "proto3";
+
+package ecommerce;
+
+service ProductInfo {
+  rpc addProduct(Product) returns (ProductID);
+  rpc getProduct(ProductID) returns (Product);
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  float price = 4;
+}
+
+message ProductID {
+  string value = 1;
+}
+```
+
 ## Enabling a One-Way Secured Connection (TLS)
 In a one-way connection, only the client validates the server to ensure that it receives data from the intended server. When establishing the connection between the client and the server, the server shares its public certificate with the client, who then validates the received certificate of server with a CA (Certificate Authority).
 
-To enable TLS, first we need to create the following certificates and keys:
-- `server.key` A private RSA key to sign and authenticate the public key.
-- `server.pem/server.crt` Self-signed X.509 public keys for distribution.
+```bash
+protoc --go_out=. --go_opt=MproductInfo.proto=server/ecommerce --go-grpc_out=. --go-grpc_opt=MproductInfo.proto=server/ecommerce productInfo.proto
+
+protoc --go_out=. --go_opt=MproductInfo.proto=client/ecommerce --go-grpc_out=. --go-grpc_opt=MproductInfo.proto=client/ecommerce productInfo.proto
+```
+
+### Modify Server - One-Way TLS
+```go
+package main
+
+import (
+	"crypto/tls"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"log"
+	"net"
+	pb "server/ecommerce"
+)
+
+var (
+	port    = ":50051"
+	crtFile = "cert/server.crt"
+	keyFile = "cert/server.key"
+)
+
+type server struct {
+	pb.UnimplementedProductInfoServer
+	productMap map[string]*pb.Product
+}
+
+func main() {
+	// Read and parse a public/private key pair and create
+	// a certificate to enable TLS.
+	cert, err := tls.LoadX509KeyPair(crtFile, keyFile)
+	if err != nil {
+		log.Fatalf("Failed to load key pair: %s", err)
+	}
+	// Enable TLS for all incoming connections by adding
+	// certificates as TLS server credentials.
+	opts := []grpc.ServerOption{
+		grpc.Creds(credentials.NewServerTLSFromCert(&cert)),
+	}
+	// Create a new gRPC server instance by passing TLS server credentials.
+	s := grpc.NewServer(opts...)
+
+	// Register the implemented service to the newly created
+	// gRPC server by calling generated APIs.
+	pb.RegisterProductInfoServer(s, &server{})
+
+	lis, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	// Bind the gRPC server to the listener and start listening
+	// to incoming messages on the port (50051)
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+```
+
+### Modify Client - One-Way TLS
+In order to get the client connected, the client needs to have the server’s self-certified public key.
+```go
+package main
+
+import (
+	// pb "client/ecommerce"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"log"
+)
+
+var (
+	address  = "localhost:50051"
+	hostname = "localhost"
+	crtFile  = "cert/server.crt"
+)
+
+func main() {
+	// Read and parse a public certificate and create a certificate to enable TLS.
+	creds, err := credentials.NewClientTLSFromFile(crtFile, hostname)
+	if err != nil {
+		log.Fatalf("failed to load credentials: %v", err)
+	}
+
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+	}
+
+	conn, err := grpc.Dial(address, opts...)
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+
+	c := pb.NewProductInfoClient(conn)
+	// Skip RPC method invocation.
+}
+```
+
 
 ## Enabling a One-Way Secured Connection (Mutual TLS - mTLS)
