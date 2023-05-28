@@ -308,3 +308,188 @@ func main() {
 
 
 ## Enabling a One-Way Secured Connection (Mutual TLS - mTLS)
+
+The main intent of an mTLS connection between client and server is to have control of clients who connect to the server. Unlike a one-way TLS connection, the server is configured to accept connections from a limited group of verified clients.
+
+Parties share their public certificates with each other and validate the other party. The basic flow of connection is as follows:
+
+1. Client sends a request to access protected information from the server.
+2. The server sends its X.509 certificate to the client.
+3. Client validates the received certificate through a CA for CA-signed certificates.
+4. If the verification is successful, the client sends its certificate to the server.
+5. Server also verifies the client certificate through the CA.
+6. Once it is successful, the server gives permission to access protected data.
+
+We need to create a CA with self-signed certificates, we need to create certificate-signing requests for both client and server, and we need to sign them using our CA. As in the previous one-way secured connection, we can use the OpenSSL tool to generate keys and certificates.
+
+- `server.key` - Private RSA key of the server.
+- `server.crt` - Public certificate of the server.
+- `client.key` - Private RSA key of the client.
+- `client.crt` - Public certificate of the client.
+- `ca.crt` - Public certificate of a CA used to sign all public certificates.
+
+### Server Code
+
+```go
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"io/ioutil"
+	"log"
+	"net"
+	pb "server/ecommerce"
+)
+
+var (
+	port    = ":50051"
+	crtFile = "cert/server.crt"
+	keyFile = "cert/server.key"
+	caFile  = "cert/ca.crt"
+)
+
+type server struct {
+	pb.UnimplementedProductInfoServer
+	productMap map[string]*pb.Product
+}
+
+// AddProduct implements ecommerce.AddProduct
+func (s *server) AddProduct(ctx context.Context, in *pb.Product) (*pb.ProductID, error) {
+	out, err := uuid.NewUUID()
+	if err != nil {
+		log.Fatal(err)
+	}
+	in.Id = out.String()
+	if s.productMap == nil {
+		s.productMap = make(map[string]*pb.Product)
+	}
+	s.productMap[in.Id] = in
+	return &pb.ProductID{Value: in.Id}, nil
+}
+
+// GetProduct implements ecommerce.GetProduct
+func (s *server) GetProduct(ctx context.Context, in *pb.ProductID) (*pb.Product, error) {
+	value, exists := s.productMap[in.Value]
+	if exists {
+		return value, nil
+	}
+	return nil, errors.New("Product does not exist for the ID" + in.Value)
+}
+
+func main() {
+	// Read and parse a public/private key pair and create
+	// a certificate to enable TLS.
+	certificate, err := tls.LoadX509KeyPair(crtFile, keyFile)
+	if err != nil {
+		log.Fatalf("Failed to load key pair: %s", err)
+	}
+
+	// Create a certificate pool from the CA.
+	certPool := x509.NewCertPool()
+	ca, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("could not read ca certificate: %s", err)
+	}
+
+	// Append the client certificates from the CA to the certificate pool.
+	if ok := certPool.AppendCertsFromPEM(ca); !ok {
+		log.Fatalf("failed to append ca certificate")
+	}
+
+	// Enable TLS for all incoming connections by creating TLS credentials.
+	opts := []grpc.ServerOption{
+		// Enable TLS for all incoming connections.
+		grpc.Creds(
+			credentials.NewTLS(&tls.Config{
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				Certificates: []tls.Certificate{certificate},
+				ClientCAs:    certPool,
+			},
+			)),
+	}
+	// Create a new gRPC server instance by passing TLS server credentials.
+	s := grpc.NewServer(opts...)
+
+	// Register the implemented service to the newly created
+	// gRPC server by calling generated APIs.
+	pb.RegisterProductInfoServer(s, &server{})
+
+	lis, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	// Bind the gRPC server to the listener and start listening
+	// to incoming messages on the port (50051)
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+```
+
+### Client Code
+```go
+package main
+
+import (
+	// pb "client/ecommerce"
+	pb "client/ecommerce"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"io/ioutil"
+	"log"
+)
+
+var (
+	address  = "localhost:50051"
+	hostname = "localhost"
+	crtFile  = "cert/client.crt"
+	keyFile  = "cert/client.key"
+	caFile   = "cert/ca.crt"
+)
+
+func main() {
+	// Create X.509 key pairs directly from the client certificate and key.
+	certificate, err := tls.LoadX509KeyPair(crtFile, keyFile)
+	if err != nil {
+		log.Fatalf("failed to load credentials: %v", err)
+	}
+	// Create a certificate pool from the CA.
+	certPool := x509.NewCertPool()
+	ca, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("could not read ca certificate: %s", err)
+	}
+	// Append the client certificates from the CA to the certificate pool.
+	if ok := certPool.AppendCertsFromPEM(ca); !ok {
+		log.Fatalf("failed to append ca certs")
+	}
+
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			ServerName:   hostname, // NOTE: this is required!
+			Certificates: []tls.Certificate{certificate},
+			RootCAs:      certPool,
+		})),
+	}
+
+	conn, err := grpc.Dial(address, opts...)
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+
+	c := pb.NewProductInfoClient(conn)
+	fmt.Println("Connection Established : ", c)
+	// Skip RPC method invocation.
+}
+```
