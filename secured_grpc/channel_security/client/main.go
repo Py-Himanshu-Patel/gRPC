@@ -3,13 +3,14 @@ package main
 import (
 	// pb "client/ecommerce"
 	pb "client/ecommerce"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"io/ioutil"
 	"log"
+	"time"
 )
 
 var (
@@ -52,6 +53,25 @@ func main() {
 	defer conn.Close()
 
 	c := pb.NewProductInfoClient(conn)
-	fmt.Println("Connection Established : ", c)
-	// Skip RPC method invocation.
+
+	// Contact the server and print out its response.
+	name := "Sumsung S10"
+	description := "Samsung Galaxy S10 is the latest smart phone, launched in February 2019"
+	price := float32(700.0)
+	// make call to server with a timeout of a second
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	// Add a product
+	r, err := c.AddProduct(ctx, &pb.Product{Name: name, Description: description, Price: price})
+	if err != nil {
+		log.Fatalf("Could not add product: %v", err)
+	}
+	log.Printf("Product ID: %s added successfully", r.Value)
+	// get the same product details which we added
+	product, err := c.GetProduct(ctx, &pb.ProductID{Value: r.Value})
+	if err != nil {
+		log.Fatalf("Could not get product: %v", err)
+	}
+	log.Printf("Product: %s", product.String())
 }

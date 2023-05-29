@@ -493,3 +493,20 @@ func main() {
 	// Skip RPC method invocation.
 }
 ```
+
+## Authenticating gRPC Calls
+
+### Baisc Auth - Username + Password
+- Read from Book
+
+### Token Auth (OAuth 2.0) - Bearer Token Based Auth
+- Read from Book
+
+### JWT Auth - JWT Token Based Auth
+- `ToDo`
+
+### Google Token-Based Auth
+- Read from Book
+
+## Summary
+There are two types of credential supports in gRPC, channel and call. Channel credentials are attached to the channels such as TLS, etc. Call credentials are attached to the call, such as OAuth 2.0 tokens, basic authentication, etc. We even can apply both credential types to the gRPC application. For example, we can have TLS enable the connection between client and server and also attach credentials to each RPC call made on the connection.
