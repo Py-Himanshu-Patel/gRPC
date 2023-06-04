@@ -14,22 +14,31 @@ Before starting know what is SSL encryption
 
 A in depth explanation of Digital Certificate, Self Sign Certificates, CA : https://www.youtube.com/watch?v=qXLD2UHq2vk
 
-## Generate private RSA Key - For Server
-```bash
-$ openssl genrsa -out server.key 2048
-Generating RSA key with 2048 bits
+### Note: 
+Why don't the client send data to server by encrypting it with the public key of server and server can decrypt it with it's private key. Because that's slow. Thus server and client end up negotiating on most strongest algo both can support with a symmetric key (same key for both server and client). That's fast in enc and decryption.
 
-$ ls
-README.md  server.key
+### Script to Generate: CA, Server Cert, Client Cert
+
+```bash
+channel_security$ sh gen_cert.sh
+
+Current Dir: channel_security
+----------- CA Cert Generated -----------
+-------- CA Cert Placed in client and server cert --------
+Certificate request self-signature ok
+subject=C = IN, ST = KA, L = BLR, CN = *.server.com
+server.crt: OK
+-------- Server Cert Generated --------
+Certificate request self-signature ok
+subject=C = IN, ST = KA, L = BLR
+C = IN, ST = KA, L = BLR
+error 18 at 0 depth lookup: self-signed certificate
+error client.crt: verification failed
+-------- Client Cert Generated --------
 ```
 
-- `genrsa` is the algorithm for generating the RSA keys
-- `server.key` is the file which holds the key
-- `2048` size of the key, default is 512 which is prone to brute force.
-- Here you can also add a passphrase to the key. So you need the passphrase whenever you need to use the key. In this example, we are not going to add a passphrase to the key.
-- We will use this `server.key` on out gRPC server.
-
 ## Generate CA and self-signed certificates
+
 `CA = Certificate Authority`
 - generate RSA key using OpenSSL, this private key is used to self sign the certificate of CA.
   ```bash
@@ -38,14 +47,14 @@ README.md  server.key
   $ ls
   ca.key  README.md  server.key
   ```
-  Do put a passphrase inorder to generate the private key. `privatekey` - passphrase, this will be asked while using this private key to generate the certificates.
+  Put a passphrase inorder to generate the private key. `privatekey` - passphrase, this will be asked while using this private key to generate the certificates. In case we like to go without passphrase key, then use this command `openssl genrsa -out ca.key 4096`.
 - Now we can create the self signed **root CA certificate** (In cryptography and computer security, a root certificate is a public key certificate that identifies a root certificate authority. Root certificates are self-signed and form the basis of an X.509-based public key infrastructure.)
   ```bash
   $ openssl req -new -x509 -sha256 -days 3650 -key ca.key -out ca.crt
   ```
   - `-new` means new request
   - `-x509` means X.509 certificate structure instead of a cert request.
-  - `-sha256` is the algo to generate the certificate
+  - `-aes256` is the algo to generate the certificate, skip this flag in order to generate a pri. key which don't need password.
   - `-days` days of validity
   - `-key` is the key we gen before to that will be go inside certificates.
   - `-out` is the name of output file
@@ -91,9 +100,27 @@ README.md  server.key
       Signature Value:
       ...
   ```
+  The values provided interactively can also be given via `-subj` flag thus reduce the burden of typing all data. Also the data provided here 
+  is not important and can be skipped by typing `.` instead of text.
   The next step is to create a server private key and certificate. Unlike the previous section, we need get the certificate signed by our new Certificate Authority(CA).
 
 ## Generate server certificate
+```bash
+$ openssl genrsa -out server.key 2048
+Generating RSA key with 2048 bits
+
+$ ls
+README.md  server.key
+```
+
+- `genrsa` is the algorithm for generating the RSA keys
+- `server.key` is the file which holds the key
+- `2048` size of the key, default is 512 which is prone to brute force.
+- Here you can also add a passphrase to the key. So you need the passphrase whenever you need to use the key. In this example, we are not going to add a passphrase to the key.
+- We will use this `server.key` on out gRPC server.
+- We did not supply any algo to encrypt the private key of server, Thus while we print (`cat`) the key we see the actual private key, without any encryption. Also the process do not ask for any passphrase. In CA private key we will use a algo to secure it, but once we generate a private key with a passphrase then we need to put the used passphrase every time we use the private key.
+
+
 To enable TLS, first we need to create the following certificates and keys:
 - `server.key` A private RSA key to sign and authenticate the public key.
 - `server.pem/server.crt` Self-signed X.509 public keys for distribution.
@@ -139,13 +166,6 @@ Generating the client certificate is very similar to creating the server certifi
 $ openssl genrsa -out client.key 2048
 
 $ openssl req -new -key client.key -out client.csr
-You are about to be asked to enter information that will be incorporated
-into your certificate request.
-What you are about to enter is what is called a Distinguished Name or a DN.
-There are quite a few fields but you can leave some blank
-For some fields there will be a default value,
-If you enter '.', the field will be left blank.
------
 Country Name (2 letter code) [AU]:IN
 State or Province Name (full name) [Some-State]:KA
 Locality Name (eg, city) []:BLR
@@ -167,6 +187,10 @@ Enter pass phrase for ca.key:
 $ ls
 ca.crt  ca.key  client.crt  client.csr  client.key  README.md  server.crt  server.csr  server.key
 ```
+You are about to be asked to enter information that will be incorporated into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN. There are quite a few fields but you can leave some blank
+For some fields there will be a default value, If you enter '.', the field will be left blank.
+
 
 ## Convert server/client keys to pem format
 ```bash
@@ -307,7 +331,7 @@ func main() {
 ```
 
 
-## Enabling a One-Way Secured Connection (Mutual TLS - mTLS)
+## Enabling a Two-Way Secured Connection (Mutual TLS - mTLS)
 
 The main intent of an mTLS connection between client and server is to have control of clients who connect to the server. Unlike a one-way TLS connection, the server is configured to accept connections from a limited group of verified clients.
 
@@ -493,6 +517,11 @@ func main() {
 	// Skip RPC method invocation.
 }
 ```
+```bash
+$ go run main.go 
+2023/06/04 12:01:22 Product ID: 6c41bcb7-02a1-11ee-88be-902e16d6a0f2 added successfully
+2023/06/04 12:01:22 Product: id:"6c41bcb7-02a1-11ee-88be-902e16d6a0f2"  name:"Sumsung S10"  description:"Samsung Galaxy S10 is the latest smart phone, launched in February 2019"  price:700
+```
 
 ## Authenticating gRPC Calls
 
@@ -503,7 +532,7 @@ func main() {
 - Read from Book
 
 ### JWT Auth - JWT Token Based Auth
-- `ToDo`
+- ``
 
 ### Google Token-Based Auth
 - Read from Book
