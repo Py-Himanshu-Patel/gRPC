@@ -525,14 +525,44 @@ $ go run main.go
 
 ## Authenticating gRPC Calls
 
-### Baisc Auth - Username + Password
-- Read from Book
+### Basic Auth - Username + Password
+In the OAuth 2.0 flow, there are four main characters: the client, the authorization server, the resource server, and the resource
+owner. The client wants to access the resource in a resource server. To access the resource, the client needs to get a token (which is an
+arbitrary string) from the authorization server. This token must be of a proper length and should not be predictable. Once the client
+receives the token, the client can send a request to the resource server with the token. The resource server then talks to the corre‐
+sponding authorization server and validates the token. If it is validated by this resource owner, the client can access the resource
 
 ### Token Auth (OAuth 2.0) - Bearer Token Based Auth
 - Read from Book
 
 ### JWT Auth - JWT Token Based Auth
-- ``
+JWT is preferred over Basic or Token Auth because
+- Resource server doesn't need to talk to the authentication server to validate the client token.
+- JWT can carry time period till it is valid, other auth methods can't.
+- Authentication need Secure Channel as requirement. So make sure TLS certificate are installed 
+on both client and server before implementing JWT or any other token access method.
+- If we want to skip the TLS certificate requirement then workaround is to send the JWT in request metadata 
+by intercepting the request before sending it. And validate the JWT at server end by intercepting the request again. 
+
+#### JWT - Symmetric Key
+- Auth server generates the jwt-secret and use it to make signature
+- signature at end of each JWT = SHA256(header+"."+payload, jwt-secret)
+- Thus if someone changed the payload then he don't have the jwt-secret and 
+hence can't generate the expected signature with new data.
+- Each application server (validator of jwt) have this jwt-secret.
+- Receiver of JWT can generate the signature using header+payload+jwt-secret 
+and verfiy result against the one present in JWT Token, if both match then it's valid Token.
+- Downside is each app server need the jwt-secret and if one service end up compromising then 
+secret need to be updated for all
+
+#### JWT - Asymmetric Key
+- Auth server will generate the public and private key. Server will enc the header+payload with private 
+key and append the signature at end of JWT Token.
+- A public key can decrypt the message of corresponding private key.
+- Each application sever will have access to public key, which can be used to decrypt the private key signature.
+- If JWT got tempered then attacker can no longer generate the sign as they don't have the private key.
+- Even if the public key of one server got compromised we don't need to worry as this is public key. Also private keyi
+
 
 ### Google Token-Based Auth
 - Read from Book
