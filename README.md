@@ -15,3 +15,4 @@ export GRPC_GO_LOG_SEVERITY_LEVEL=info
 4. [gRPC - Under the hood](under_the_hood/README.md)
 5. [gRPC: Beyond the Basics](beyond_basic/README.md)
 6. [Secured gRPC](secured_grpc/README.md)
+7. [gRPC in Production](grpc_in_production/README.md)
