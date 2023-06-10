@@ -563,6 +563,12 @@ key and append the signature at end of JWT Token.
 - If JWT got tempered then attacker can no longer generate the sign as they don't have the private key.
 - Even if the public key of one server got compromised we don't need to worry as this is public key. Also private keyi
 
+Refer: https://www.youtube.com/watch?v=kVpB-uH6X-s
+
+```bash
+$ go get github.com/dgrijalva/jwt-go
+```
+
 
 ### Google Token-Based Auth
 - Read from Book

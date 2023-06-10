@@ -16,9 +16,19 @@ libprotoc 3.12.4
 ```
 2. Install the gRPC library for GoLang
 ```bash
+# download packages
 go get google.golang.org/grpc
 go get google.golang.org/protobuf/cmd/protoc-gen-go
 go get google.golang.org/grpc/cmd/protoc-gen-go-grpc
+# install packages
+$ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+$ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+```
+And
+```bash
+# put in .bashrc file
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
 ```
 
 3. Create Go Stub/Client

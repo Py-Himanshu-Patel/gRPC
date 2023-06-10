@@ -2,6 +2,12 @@
 
 [Github Repo of Book - Code Samples](https://github.com/grpc-up-and-running/samples)
 
+## Turn on the logging in GoLang GRPC
+```bash
+export GRPC_GO_LOG_VERBOSITY_LEVEL=99 
+export GRPC_GO_LOG_SEVERITY_LEVEL=info
+```
+
 ## Quick Notes and Practice Samples
 1. [Intro to gRPC](intro/README.md)
 2. [Getting Started gRPC](getting_started/README.md)
