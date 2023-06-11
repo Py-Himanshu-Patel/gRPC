@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	wrapper "github.com/golang/protobuf/ptypes/wrappers"
@@ -10,13 +11,23 @@ import (
 	pb "grpc_prod/proto-gen"
 )
 
-const (
-	address = "localhost:50051"
-)
+//const (
+//	address = "localhost:50051"
+//)
+
+func getHostName() string {
+	hostname := os.Getenv("hostname")
+	if hostname == "" {
+		hostname = "localhost"
+	}
+	// add pre decided port to hostname
+	hostname = hostname + ":50051"
+	return hostname
+}
 
 func main() {
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	conn, err := grpc.Dial(getHostName(), grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}

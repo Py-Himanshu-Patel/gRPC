@@ -130,7 +130,60 @@ For instance, if you have written tests using Go, then you can easily
 integrate your Go tests with tools such as Jenkins, TravisCI, Spinnaker, etc.
 
 ## Deployment
+Build a network on which both client and server container can connect inorder to communicate.
+```bash
+$ docker network create grpc-net
+```
 
 ### Deploying on Docker
+Run from below directory (because Dockerfile need to refer `proto-gen` dir)
+Dockerfile can't refer it's parent directory if the command to build image
+is run from child directory.
+
+Refer this Server Dockerfile: `grpc_in_production/server/Dockerfile`
+
+#### gRPC Server Container
+```bash
+$ pwd
+/home/lenovo/dev/gRPC/grpc_in_production
+```
+Build docker image and container for server
+```bash
+docker image build -t grpc-productinfo-server -f server/Dockerfile .
+docker run -it --rm --network=grpc-net --name=productinfo --hostname=productinfo -p 50051:50051  grpc-productinfo-server
+```
+
+When we run the server and client Docker containers, we can specify a common network so that the client application can discover the
+location of the server application based on the hostname. This means that the client application code has to change so that it connects 
+to the hostname of the server.
+
+#### gRPC Server Container
+
+Update the client code to fetch hostname from env var
+```go
+//const (
+//	address = "localhost:50051"
+//)
+
+func getHostName() string {
+	hostname := os.Getenv("hostname")
+	if hostname == "" {
+		hostname = "localhost"
+	}
+	// add pre decided port to hostname
+	hostname = hostname + ":50051"
+	return hostname
+}
+```
+
+Refer this Client Dockerfile: `grpc_in_production/server/Dockerfile`
+
+```bash
+docker image build -t grpc-productinfo-client -f client/Dockerfile .
+docker run -it --rm --network=grpc-net --hostname=client grpc-productinfo-client   
+```
 
 ### Deploying on Kubernetes
+```bash
+
+```
