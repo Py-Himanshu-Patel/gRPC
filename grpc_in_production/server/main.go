@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	pb "grpc_prod/proto-gen"
+	"sync"
 )
 
 const (
@@ -24,6 +25,7 @@ const (
 
 // server is used to implement ecommerce/product_info.
 type server struct {
+	sync.RWMutex
 	productMap map[string]*pb.Product
 }
 
@@ -34,6 +36,8 @@ func (s *server) AddProduct(ctx context.Context, in *pb.Product) (*wrapper.Strin
 		log.Fatal(err)
 	}
 	in.Id = out.String()
+	s.Lock()
+	defer s.Unlock()
 	if s.productMap == nil {
 		s.productMap = make(map[string]*pb.Product)
 	}
@@ -44,6 +48,8 @@ func (s *server) AddProduct(ctx context.Context, in *pb.Product) (*wrapper.Strin
 
 // GetProduct implements ecommerce.GetProduct
 func (s *server) GetProduct(ctx context.Context, in *wrapper.StringValue) (*pb.Product, error) {
+	s.Lock()
+	defer s.Unlock()
 	value, exists := s.productMap[in.Value]
 	if exists {
 		log.Printf("New product retrieved - ID : %s", in)

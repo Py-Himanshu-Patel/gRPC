@@ -57,12 +57,66 @@ we need tailor-made load-testing tools that can load test the gRPC server by gen
 `ghz` is such a load-testing tool; it is implemented as a command-line utility using Go. 
 It can be used for testing and debugging services locally, and also in automated continuous integration environments for performance regression testing.
 
+- Download `ghz` from https://github.com/bojand/ghz/releases with name  *ghz-linux-x86_64.tar.gz*
+- Extract and place the binaries in `/usr/local/ghz`
 ```bash
-ghz --insecure \
---proto ./greeter.proto \
---call helloworld.Greeter.SayHello \
--d '{"name":"Joe"}'\
--n 2000 \
--c 20 \
-0.0.0.0:50051
+$ ls /usr/local/ghz/
+ghz  ghz-web  LICENSE
 ```
+- Set the `PATH` to these binaries
+```bash
+# ~/.bashrc
+
+# ghz binary - grpc load testing
+export PATH="$PATH:/usr/local/ghz/"
+```
+
+Run below command after starting server 
+- `insecure` means insecure command
+- `--proto` location to .proto file from current location
+- `--call` Packagename.ServiceName.MethodName in protofile
+- `-d` data which need to sent in request as a valid json string
+- `-n` number of request to invoke
+- `-c` no of goroutines to spin **Server should be thread safe for this or it will exit with error and client will see `Connection Refused`**
+- `0.0.0.0:50051` is the host and port on which server is listening
+
+```bash
+#$ pwd
+#/home/lenovo/dev/gRPC/grpc_in_production
+
+ghz --insecure --proto proto-gen/product_info.proto --call ecommerce.ProductInfo.addProduct -d '{"id":"1","name":"Joe","description":"First Description","price":100}' -n 200 -c 20 0.0.0.0:50051
+
+Summary:
+  Count:        200
+  Total:        12.47 ms
+  Slowest:      2.61 ms
+  Fastest:      0.09 ms
+  Average:      0.57 ms
+  Requests/sec: 16033.62
+
+Response time histogram:
+  0.089 [1]  |∎
+  0.341 [63] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  0.593 [57] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  0.845 [46] |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  1.097 [18] |∎∎∎∎∎∎∎∎∎∎∎
+  1.349 [4]  |∎∎∎
+  1.601 [7]  |∎∎∎∎
+  1.854 [1]  |∎
+  2.106 [2]  |∎
+  2.358 [0]  |
+  2.610 [1]  |∎
+
+Latency distribution:
+  10 % in 0.18 ms 
+  25 % in 0.29 ms 
+  50 % in 0.50 ms 
+  75 % in 0.74 ms 
+  90 % in 0.98 ms 
+  95 % in 1.36 ms 
+  99 % in 1.86 ms 
+
+Status code distribution:
+  [OK]   200 responses   
+```
+
