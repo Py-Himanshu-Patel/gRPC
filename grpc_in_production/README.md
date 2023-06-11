@@ -120,3 +120,17 @@ Status code distribution:
   [OK]   200 responses   
 ```
 
+## Continuous Integration
+When it comes to gRPC applications, often the server- and client-side
+applications are independent and may be built with disparate technologies. So, as part
+of the CI process, you will have to verify the gRPC client- or server-side code using
+the unit and integration testing techniques that we learned in the previous section.
+
+For instance, if you have written tests using Go, then you can easily
+integrate your Go tests with tools such as Jenkins, TravisCI, Spinnaker, etc.
+
+## Deployment
+
+### Deploying on Docker
+
+### Deploying on Kubernetes
