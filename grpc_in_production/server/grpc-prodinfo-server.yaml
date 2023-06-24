@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # name of deployment
+  name: grpc-productinfo-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-productinfo-server
+  template:
+    metadata:
+      labels:
+        app: grpc-productinfo-server
+    spec:
+      containers:
+          # name of grpc container
+        - name: grpc-productinfo-server
+          # image and tag of associate container
+          image: patelhimanshu/grpc-productinfo-server
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+          ports:
+            - containerPort: 50051
+              name: grpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # name of the service this is used by the client to connect
+  # to server pod (remove the need to use IP of server pod)
+  name: productinfo
+spec:
+  selector:
+    app: grpc-productinfo-server
+  ports:
+    - port: 50051
+      targetPort: 50051
+      name: grpc
+  type: NodePort

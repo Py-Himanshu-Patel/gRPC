@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # name of job
+  name: grpc-productinfo-client
+spec:
+  #  Number of times that the pod needs to run successfully before the job is consid‐
+  #  ered completed.
+  completions: 1
+  #  How many pods should run in parallel
+  parallelism: 1
+  template:
+    spec:
+      containers:
+        - name: grpc-productinfo-client
+          image: patelhimanshu/grpc-productinfo-client
+          env:
+          - name: hostname
+            # hostname of the service of server
+            value: "productinfo"
+      restartPolicy: Never
+  backoffLimit: 4

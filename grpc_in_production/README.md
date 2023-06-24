@@ -157,7 +157,7 @@ When we run the server and client Docker containers, we can specify a common net
 location of the server application based on the hostname. This means that the client application code has to change so that it connects 
 to the hostname of the server.
 
-#### gRPC Server Container
+#### gRPC Client Container
 
 Update the client code to fetch hostname from env var
 ```go
@@ -177,13 +177,81 @@ func getHostName() string {
 ```
 
 Refer this Client Dockerfile: `grpc_in_production/server/Dockerfile`
-
+Pass the `hostname` of server container i.e. `productinfo` in the environment variable `hostname`
 ```bash
 docker image build -t grpc-productinfo-client -f client/Dockerfile .
-docker run -it --rm --network=grpc-net --hostname=client grpc-productinfo-client   
+docker run --rm --network=grpc-net -e hostname=productinfo --hostname=client grpc-productinfo-client
 ```
 
-### Deploying on Kubernetes
-```bash
+Push the images to DockerHub so we can use them in Kubernetes build.
+It's a bit complex to use the local image in Kubernetes, so let's push the
+image to DockerHub and pod will pull the same image.
 
+Loing into the DockerHub from CLI inorder to push and pull images
+```shell
+lenovo@workstation:~$ docker login
+Login with your Docker ID to push and pull images from Docker Hub. If you don't have a Docker ID, head over to https://hub.docker.com to create one.
+Username: patelhimanshu
+Password: 
+```
+Check the images
+```shell
+$ docker image ls
+REPOSITORY                    TAG       IMAGE ID       CREATED        SIZE
+grpc-productinfo-client       latest    bb147a961854   12 days ago    22.1MB
+grpc-productinfo-server       latest    a902cba8e1d4   12 days ago    22.2MB
+```
+Tag the required image appending the username of docker repo.
+```shell
+$ docker tag grpc-productinfo-server:latest patelhimanshu/grpc-productinfo-server:latest
+$ docker image ls
+REPOSITORY                              TAG       IMAGE ID       CREATED        SIZE
+grpc-productinfo-client                 latest    bb147a961854   12 days ago    22.1MB
+grpc-productinfo-server                 latest    a902cba8e1d4   12 days ago    22.2MB
+patelhimanshu/grpc-productinfo-server   latest    a902cba8e1d4   12 days ago    22.2MB
+```
+Push the image
+```shell
+$ docker push patelhimanshu/grpc-productinfo-server
+Using default tag: latest
+The push refers to repository [docker.io/patelhimanshu/grpc-productinfo-server]
+73b0c1cfa8c0: Pushed 
+bea0a26e73b7: Pushed 
+bb01bd7e32b5: Mounted from library/alpine 
+latest: digest: sha256:54cf28638e26bcda7d9ee476904c9d3ce89f45ddf547b8f6d5619cc44747fb80 size: 949
+```
+
+Do same for client image.
+
+### Deploying on Kubernetes
+Deploy Server Pod
+Refer File: `grpc_in_production/server/grpc-prodinfo-server.yaml`
+```bash
+$ kubectl apply -f server/grpc-prodinfo-server.yaml
+$ kubectl get pods
+NAME                                       READY   STATUS    RESTARTS   AGE
+grpc-productinfo-server-866c66548f-85n5d   1/1     Running   0          35s
+```
+
+Deploy Client Pod
+Refer File: `grpc_in_production/client/grpc-prodinfo-client.yaml`
+```bash
+$ kubectl apply -f client/grpc-prodinfo-client.yaml
+$ kubectl get pods
+NAME                                       READY   STATUS      RESTARTS   AGE
+grpc-productinfo-client-g5qgz              0/1     Completed   0          7s
+grpc-productinfo-server-866c66548f-hj7ss   1/1     Running     0          2m5s
+```
+
+Client is completed because it done the said task (It was a Job not a deployment), which is to complete the 1 execution.
+Check logs of server and client both
+
+```shell
+$ kubectl logs grpc-productinfo-server-866c66548f-hj7ss 
+2023/06/24 09:52:14 New product added - ID : cc006c22-1274-11ee-9756-3e643e6aa77d, Name : Sumsung S10
+2023/06/24 09:52:14 New product retrieved - ID : value:"cc006c22-1274-11ee-9756-3e643e6aa77d"
+$ kubectl logs grpc-productinfo-client-g5qgz 
+2023/06/24 09:52:14 Product ID: cc006c22-1274-11ee-9756-3e643e6aa77d added successfully
+2023/06/24 09:52:14 Product: %!(EXTRA string=id:"cc006c22-1274-11ee-9756-3e643e6aa77d" name:"Sumsung S10" 
+description:"Samsung Galaxy S10 is the latest smart phone, launched in February 2019" price:700 )
 ```
