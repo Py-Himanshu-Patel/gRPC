@@ -255,3 +255,26 @@ $ kubectl logs grpc-productinfo-client-g5qgz
 2023/06/24 09:52:14 Product: %!(EXTRA string=id:"cc006c22-1274-11ee-9756-3e643e6aa77d" name:"Sumsung S10" 
 description:"Samsung Galaxy S10 is the latest smart phone, launched in February 2019" price:700 )
 ```
+
+### Kubernetes Ingress for exposing gRPC service externally
+So far what we have done is deploy a gRPC server on Kubernetes and make it accessible to another pod (which is running as a Job) running in the same cluster. What if
+we want to expose the gRPC service to the external applications outside the Kubernetes cluster?
+
+We can think of an ingress as a load balancer that sits between the Kubernetes service  and the external applications. Ingress routes the external traffic to the service; the
+service then routes the internal traffic between the matching pods. An ingress controller manages the ingress resource in a given Kubernetes cluster. Also,
+when you expose a gRPC service to the external application, one of the mandatory requirements is to support gRPC routing at the ingress level.
+
+For this example, we’ll use the `Nginx ingress` controller, which is based on the `Nginx` load balancer. (Based on the Kubernetes cluster you use, you may select the most
+appropriate ingress controller that supports gRPC.) Nginx Ingress supports gRPC for routing external traffic into internal services.
+
+(I haven't tried this yet, but including a sample for future reference) Refer File: `grpc_in_production/ingres/grpc-productinfo-ingress.yaml`
+Once you deploy this Ingress resource, any external application can invoke the gRPC server via the hostname (`productinfo`) and the default port (`80`).
+
+## Observability
+
+### Metrics
+Metrics are a numeric representation of data measured over intervals of time.
+One is `system-level` metrics like `CPU usage`, `memory usage`, etc. The other one is `application-level` metrics like `inbound request rate`, 
+`request error rate`, etc.
+
+#### OpenCensus with gRPC

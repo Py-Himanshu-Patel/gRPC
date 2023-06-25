@@ -1,0 +1,22 @@
+apiVersion: extensions/v1beta1
+# specify ingress resource
+kind: Ingress
+metadata:
+  # specify grpc as backend
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+  # name of ingress resource
+  name: grpc-prodinfo-ingress
+spec:
+  rules:
+    # name exposed to external world
+    - host: productinfo
+      http:
+        paths:
+          - backend:
+              # name of associated kubernetes service
+              serviceName: productinfo
+              # name of service port specified in service
+              servicePort: grpc
