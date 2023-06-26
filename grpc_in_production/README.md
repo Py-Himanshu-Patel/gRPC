@@ -278,3 +278,27 @@ One is `system-level` metrics like `CPU usage`, `memory usage`, etc. The other o
 `request error rate`, etc.
 
 #### OpenCensus with gRPC
+Refer Book - gRPC Up and Running
+
+#### Prometheus with gRPC
+Install Prometheus lib for golang
+```shell
+go get github.com/grpc-ecosystem/go-grpc-prometheus
+```
+
+Client File: `grpc_in_production/observability/client/main.go`
+Server File: `grpc_in_production/observability/server/main.go`
+
+Once we run the server and client, we can access the server and client metrics
+through the created HTTP endpoint (e.g., server metrics on http://localhost:9092/
+metrics and client metrics on http://localhost:9094/metrics).
+
+We can then setup Promethus server to pull metrics from server end point and client get closed after doing the request 
+so the end point of client is not always available. thus we can push the metrics of client to promethus 
+(rather than pulling from promethus on regular intarval). 
+
+One advantage of metrics-based monitoring in the system is that the cost of handling metrics data doesn’t increase 
+with the activities of the system. For example, an increase in the application’s traffic will not increase handling 
+costs like disk utilization, processing complexity, speed of visualization, operational costs, etc.
+
+## Logs
