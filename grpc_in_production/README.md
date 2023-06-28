@@ -293,12 +293,25 @@ Once we run the server and client, we can access the server and client metrics
 through the created HTTP endpoint (e.g., server metrics on http://localhost:9092/
 metrics and client metrics on http://localhost:9094/metrics).
 
-We can then setup Promethus server to pull metrics from server end point and client get closed after doing the request 
+We can then setup Prometheus server to pull metrics from server end point and client get closed after doing the request 
 so the end point of client is not always available. thus we can push the metrics of client to promethus 
-(rather than pulling from promethus on regular intarval). 
+(rather than pulling from prometheus on regular interval). 
 
 One advantage of metrics-based monitoring in the system is that the cost of handling metrics data doesn’t increase 
 with the activities of the system. For example, an increase in the application’s traffic will not increase handling 
 costs like disk utilization, processing complexity, speed of visualization, operational costs, etc.
 
 ## Logs
+we can attach a new logging interceptor on both the client side and server side and log request and response messages of each remote call.
+This we already discussed in `gRPC: Beyond the Basics`.
+
+A request starting from the client is normally going through a number of services and different systems before the response going back to the client. All these
+intermediate events are part of the request flow. With tracing, we gain visibility into both the path traversed by a request as well as the structure of a request.
+
+In tracing, a trace is a tree of spans, which are the primary building blocks of distributed tracing. 
+The span contains the metadata about the task, the latency (the time spent to complete the task), 
+and other related attributes of the task. A trace has its own ID called TraceID and it is a unique byte 
+sequence. This traceID groups and distinguishes spans from each other. Let’s try to enable tracing in 
+our gRPC application.
+
+## Tracing
