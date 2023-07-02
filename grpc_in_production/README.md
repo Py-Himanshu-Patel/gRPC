@@ -315,3 +315,128 @@ sequence. This traceID groups and distinguishes spans from each other. Let’s t
 our gRPC application.
 
 ## Tracing
+
+Zipkin is a distributed tracing system. It helps gather timing data needed to troubleshoot latency problems in 
+service architectures. Features include both the collection and lookup of this data.
+
+Tracers live in your applications and record timing and metadata about operations that took place. The trace data collected is called a Span.
+For example, when an operation is being traced and it needs to make an outgoing http request, a few headers are added to propagate IDs. Headers are not used to send details such as the operation name.
+
+Refer for architecture : https://zipkin.io/pages/architecture.html
+
+### Setup ZipKin
+- Docker Image (Prefered and Used Below)
+- Java Binaries
+
+```shell
+# pull image and start zipkin server on 9411 port
+docker run -d -p 9411:9411 openzipkin/zipkin
+```
+Open in browser: http://localhost:9411/zipkin/
+
+Install Libraries
+```shell
+go get -u contrib.go.opencensus.io/exporter/zipkin
+go get -u go.opencensus.io
+go get -u github.com/openzipkin/zipkin-go
+```
+
+### Instrument Server and Client with OpenCensus Tracing lib
+Refer: https://opencensus.io/guides/grpc/go/
+
+Write a Tracer which export traces to zipkin (Dist. Tracing System)
+```go
+package tracer
+
+import (
+	"contrib.go.opencensus.io/exporter/zipkin"
+	"fmt"
+	openzipkin "github.com/openzipkin/zipkin-go"
+	zipkinHTTP "github.com/openzipkin/zipkin-go/reporter/http"
+	"go.opencensus.io/trace"
+	"log"
+)
+
+const (
+	grpcServerPort   = ":50051"
+	zipkinServerPort = "9411"
+)
+
+func NewExporter() *zipkin.Exporter {
+	// 1. Configure exporter to export traces to Zipkin.
+	localEndpoint, err := openzipkin.NewEndpoint("ecommerce service tracing", "localhost"+grpcServerPort)
+	if err != nil {
+		log.Fatalf("Failed to create the local zipkinEndpoint: %v", err)
+	}
+	reporter := zipkinHTTP.NewReporter(fmt.Sprintf("http://localhost:%s/api/v2/spans", zipkinServerPort))
+	zipkinExporter := zipkin.NewExporter(reporter, localEndpoint)
+	return zipkinExporter
+}
+
+func RegisterExporterWithTracer() {
+	trace.RegisterExporter(NewExporter())
+	// 2. Configure 100% sample rate, otherwise, few traces will be sampled.
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+}
+```
+
+### Client Side
+```go
+func main() {
+    tracer.RegisterExporterWithTracer()
+
+	// Set up a connection to the server along with tracing stats handler
+	conn, err := grpc.Dial(
+        getHostName(),
+        grpc.WithInsecure(),
+        grpc.WithStatsHandler(new(ocgrpc.ClientHandler)),
+	)
+
+	...
+    // create a context and a span for GetProduct
+    getProductContext, getProductSpan := trace.StartSpan(context.Background(), "ecommerce.client.GetProduct")
+    product, err := c.GetProduct(getProductContext, &wrapper.StringValue{Value: r.Value})
+    if err != nil {
+    log.Fatalf("Could not get product: %v", err)
+    }
+    // end the add product span to show the end of grpc request sent to GetProduct procedure
+    getProductSpan.End()
+    log.Printf("Product: ", product.String())
+
+    ...
+}
+```
+
+### Server Side
+```go
+// GetProduct implements ecommerce.GetProduct
+func (s *server) GetProduct(ctx context.Context, in *wrapper.StringValue) (*pb.Product, error) {
+    // give a context and name to span
+    ctx, span := trace.StartSpan(ctx, "ecommerce.server.GetProduct")
+    defer span.End()
+    
+    s.Lock()
+    defer s.Unlock()
+    value, exists := s.productMap[in.Value]
+    if exists {
+        log.Printf("New product retrieved - ID : %s", in)
+        return value, nil
+    }
+    return nil, errors.New("Product does not exist for the ID" + in.Value)
+}
+
+func main() {
+    tracer.RegisterExporterWithTracer()
+    ...
+	// Create a gRPC Server with OpenCensus Tracer
+	grpcServer := grpc.NewServer(grpc.StatsHandler(&ocgrpc.ServerHandler{}))
+	...
+}
+```
+
+<div align="center">
+    <img src="zipkin_reporting.png">
+</div>
+
+- `ecommerce service tracing: ecommerce.client.getproduct`: shows `208 us` time the client side took to get this request in complete form.
+- `ecommerce service tracing: ecommerce.server.getproduct`: shows `22 us` time the server side took to get server this request.
